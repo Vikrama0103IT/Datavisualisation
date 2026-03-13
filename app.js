@@ -207,12 +207,13 @@ function loadSheet(name) {
   document.querySelectorAll('.sheet-tab').forEach(t => {
     t.classList.toggle('active', t.textContent === name);
   });
+  const qaLabel = $('qa-sheet-label');
+  if (qaLabel) qaLabel.textContent = name;
   const ws = state.workbook.Sheets[name];
   const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
   state.rawData = raw;
   state.columns = detectColumns(raw);
   applyFilters();
-  buildFieldList();
   buildFilters();
   populateChartSelects();
   renderKPIs();
@@ -242,6 +243,22 @@ function showUpload() {
   pqaState.sheetName = null;
   const pqaSec = $('pqa-section');
   if (pqaSec) pqaSec.classList.add('hidden');
+  const sbList = $('sb-game-list');
+  if (sbList) sbList.innerHTML = '<div class="sb-game-empty">Load data to see games</div>';
+  const sbCount = $('sb-game-count');
+  if (sbCount) sbCount.textContent = '';
+  const sbSearch = $('sb-game-search');
+  if (sbSearch) sbSearch.value = '';
+
+  // Reset PQA search section
+  const pqaSearchSec = $('pqa-search-section');
+  if (pqaSearchSec) pqaSearchSec.classList.add('hidden');
+  const sbPqaList = $('sb-pqa-game-list');
+  if (sbPqaList) sbPqaList.innerHTML = '<div class="sb-game-empty">No PQA data loaded</div>';
+  const sbPqaCount = $('sb-pqa-game-count');
+  if (sbPqaCount) sbPqaCount.textContent = '';
+  const sbPqaSearch = $('sb-pqa-game-search');
+  if (sbPqaSearch) sbPqaSearch.value = '';
 }
 
 // ── Filters ────────────────────────────────────────────────────────────────
@@ -540,14 +557,21 @@ function renderTable() {
 
   // Body
   ui.tableBody.innerHTML = page.map(row =>
-    '<tr>' + cols.map(col => `<td title="${escHtml(String(row[col.name] ?? ''))}">${escHtml(String(row[col.name] ?? ''))}</td>`).join('') + '</tr>'
+    '<tr class="clickable-row">' + cols.map(col => `<td title="${escHtml(String(row[col.name] ?? ''))}">${escHtml(String(row[col.name] ?? ''))}</td>`).join('') + '</tr>'
   ).join('');
+
+  // Click handler — show detail modal
+  ui.tableBody.querySelectorAll('.clickable-row').forEach((tr, idx) => {
+    tr.addEventListener('click', () => showGameDetail(page[idx]));
+  });
 
   // Footer
   ui.rowCount.textContent = `${total.toLocaleString('en-IN')} rows`;
   ui.pageInfo.textContent = `Page ${state.page + 1} of ${pages}`;
   ui.btnPrev.disabled = state.page === 0;
   ui.btnNext.disabled = state.page >= pages - 1;
+
+  renderSidebarGameList();
 }
 
 // ── Export PDF — visuals on page 1 exactly as on screen, table on page 2 ────
@@ -689,6 +713,11 @@ function loadPQASection(wb) {
   pqaSection.classList.remove('hidden');
   renderPQAKPIs();
   renderPQACharts();
+
+  // Show PQA sidebar search section and populate it
+  const pqaSearchSec = $('pqa-search-section');
+  if (pqaSearchSec) pqaSearchSec.classList.remove('hidden');
+  renderPQASidebarGameList();
 }
 
 function renderPQAKPIs() {
@@ -796,6 +825,209 @@ function escHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Sidebar Game Search ────────────────────────────────────────────────────
+
+function getGameNameCol() {
+  // Match camelCase "GameName", "game name", "game_name", "Game Title", etc.
+  return (
+    state.columns.find(c => /game.?name/i.test(c.name))  ||
+    state.columns.find(c => /game.?title/i.test(c.name)) ||
+    state.columns.find(c => /\bname\b/i.test(c.name))    ||
+    state.columns.find(c => /\btitle\b/i.test(c.name))   ||
+    state.columns.find(c => c.type === 'text')            ||
+    state.columns[0]                                       ||
+    null
+  );
+}
+
+function renderSidebarGameList() {
+  const listEl  = $('sb-game-list');
+  const countEl = $('sb-game-count');
+  if (!listEl) return;
+
+  const nameCol = getGameNameCol();
+  if (!nameCol || !state.filteredData.length) {
+    listEl.innerHTML  = '<div class="sb-game-empty">Load data to see games</div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  const query       = ($('sb-game-search')?.value || '').trim().toLowerCase();
+  const platColName = ui.platformCol?.value || '';
+
+  // Show ALL rows — no deduplication, so count matches total QA games
+  const items = state.filteredData
+    .map(row => ({
+      name: String(row[nameCol.name] || '').trim(),
+      plat: platColName ? String(row[platColName] || '').trim() : '',
+      row,
+    }))
+    .filter(item => item.name && (!query || item.name.toLowerCase().includes(query)));
+
+  if (countEl) countEl.textContent = items.length + ' game' + (items.length !== 1 ? 's' : '');
+
+  if (!items.length) {
+    listEl.innerHTML = '<div class="sb-game-empty">No games found</div>';
+    return;
+  }
+
+  listEl.innerHTML = items
+    .map((item, i) => {
+      const sub = item.plat
+        ? `<span class="sb-game-sub">${escHtml(item.plat)}</span>`
+        : '';
+      return `<button class="sb-game-item" data-idx="${i}" title="${escHtml(item.name)}">
+        <span class="sb-game-name">${escHtml(item.name)}</span>${sub}
+      </button>`;
+    })
+    .join('');
+
+  listEl.querySelectorAll('.sb-game-item').forEach((btn, i) => {
+    btn.addEventListener('click', () => showGameDetail(items[i].row));
+  });
+}
+
+// ── Game Detail Modal ──────────────────────────────────────────────────────
+
+function getStatusBadgeClass(value) {
+  const v = String(value).toLowerCase().trim();
+  const pass    = ['pass', 'passed', 'done', 'completed', 'approved', 'yes', 'ok', 'cleared', 'fixed'];
+  const fail    = ['fail', 'failed', 'error', 'rejected', 'no', 'crash', 'blocked', 'abort'];
+  const pending = ['pending', 'in progress', 'wip', 'hold', 'review', 'open', 'todo', 'inprogress', 'ongoing'];
+  if (pass.some(k => v.includes(k)))    return 'badge-status-pass';
+  if (fail.some(k => v.includes(k)))    return 'badge-status-fail';
+  if (pending.some(k => v.includes(k))) return 'badge-status-pending';
+  return 'badge-status-default';
+}
+
+// cols   — column definitions to use (state.columns for QA, pqaState.columns for PQA)
+// isPQA  — true → show purple PQA header accent
+function showGameDetail(row, cols, isPQA) {
+  cols = cols || state.columns;
+  if (!cols.length) return;
+
+  const titleCol =
+    cols.find(c => /game.?name/i.test(c.name))  ||
+    cols.find(c => /game.?title/i.test(c.name)) ||
+    cols.find(c => /\bname\b/i.test(c.name))    ||
+    cols.find(c => /\btitle\b/i.test(c.name))   ||
+    cols.find(c => c.type === 'text')            ||
+    cols[0];
+
+  const title = String(row[titleCol.name] || '—');
+  $('game-modal-title').textContent = title;
+
+  // Header colour: purple for PQA, default dark for QA
+  const modalHeader = document.querySelector('.game-modal-header');
+  if (modalHeader) {
+    modalHeader.style.background = isPQA ? '#2d1b4e' : '';
+  }
+  const modalLabel = document.querySelector('.game-modal-label');
+  if (modalLabel) {
+    modalLabel.textContent = isPQA ? 'PQA Game Details' : 'Game Details';
+    modalLabel.style.color = isPQA ? '#a855f7' : '';
+  }
+  const modalIcon = document.querySelector('.game-modal-icon');
+  if (modalIcon) {
+    modalIcon.style.background = isPQA ? 'rgba(168,85,247,0.15)' : '';
+    modalIcon.style.color      = isPQA ? '#a855f7' : '';
+  }
+
+  const statusKeywords = ['status', 'state', 'result', 'pass', 'fail', 'qa', 'pqa', 'approval', 'review'];
+
+  const body = $('game-modal-body');
+  body.innerHTML = cols.map(col => {
+    const raw = row[col.name];
+    const val = (raw == null || raw === '') ? '' : String(raw);
+    const isTitle     = col.name === titleCol.name;
+    const isStatusCol = statusKeywords.some(k => col.name.toLowerCase().includes(k));
+
+    let valueHtml;
+    if (!val) {
+      valueHtml = `<span class="game-detail-field-value val-empty">—</span>`;
+    } else if (isStatusCol) {
+      valueHtml = `<span class="game-detail-badge ${getStatusBadgeClass(val)}">${escHtml(val)}</span>`;
+    } else {
+      valueHtml = `<span class="game-detail-field-value">${escHtml(val)}</span>`;
+    }
+
+    return `<div class="game-detail-field${isTitle ? ' game-detail-field-full' : ''}">
+      <div class="game-detail-field-label">${escHtml(col.name)}</div>
+      <div>${valueHtml}</div>
+    </div>`;
+  }).join('');
+
+  $('game-detail-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+// ── PQA Sidebar Game Search ────────────────────────────────────────────────
+
+function getPQAGameNameCol() {
+  const cols = pqaState.columns;
+  return (
+    cols.find(c => /game.?name/i.test(c.name))  ||
+    cols.find(c => /game.?title/i.test(c.name)) ||
+    cols.find(c => /\bname\b/i.test(c.name))    ||
+    cols.find(c => /\btitle\b/i.test(c.name))   ||
+    cols.find(c => c.type === 'text')            ||
+    cols[0]                                       ||
+    null
+  );
+}
+
+function renderPQASidebarGameList() {
+  const listEl  = $('sb-pqa-game-list');
+  const countEl = $('sb-pqa-game-count');
+  if (!listEl) return;
+
+  const nameCol = getPQAGameNameCol();
+  if (!nameCol || !pqaState.data.length) {
+    listEl.innerHTML = '<div class="sb-game-empty">No PQA data loaded</div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  const query       = ($('sb-pqa-game-search')?.value || '').trim().toLowerCase();
+  const platColName = ui.pqaPlatformCol?.value || '';
+
+  // Show ALL rows — no deduplication, so count matches total PQA games
+  const items = pqaState.data
+    .map(row => ({
+      name: String(row[nameCol.name] || '').trim(),
+      plat: platColName ? String(row[platColName] || '').trim() : '',
+      row,
+    }))
+    .filter(item => item.name && (!query || item.name.toLowerCase().includes(query)));
+
+  if (countEl) countEl.textContent = items.length + ' game' + (items.length !== 1 ? 's' : '');
+
+  if (!items.length) {
+    listEl.innerHTML = '<div class="sb-game-empty">No PQA games found</div>';
+    return;
+  }
+
+  listEl.innerHTML = items
+    .map((item, i) => {
+      const sub = item.plat
+        ? `<span class="sb-game-sub">${escHtml(item.plat)}</span>`
+        : '';
+      return `<button class="sb-game-item sb-pqa-game-item" data-idx="${i}" title="${escHtml(item.name)}">
+        <span class="sb-game-name">${escHtml(item.name)}</span>${sub}
+      </button>`;
+    })
+    .join('');
+
+  listEl.querySelectorAll('.sb-pqa-game-item').forEach((btn, i) => {
+    btn.addEventListener('click', () => showGameDetail(items[i].row, pqaState.columns, true));
+  });
+}
+
+function hideGameDetail() {
+  $('game-detail-modal').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 // ── Live-sync (File System Access API) ─────────────────────────────────────
@@ -940,6 +1172,15 @@ function init() {
   });
 
 
+  // Game Detail Modal close
+  $('game-modal-close').addEventListener('click', hideGameDetail);
+  $('game-detail-modal').addEventListener('click', e => {
+    if (e.target === $('game-detail-modal')) hideGameDetail();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideGameDetail();
+  });
+
   // Buttons
   ui.btnNewFile.addEventListener('click', showUpload);
   ui.btnExport.addEventListener('click', exportAllVisuals);
@@ -965,6 +1206,14 @@ function init() {
       renderTable();
     }, 280);
   });
+
+  // Sidebar QA game name search
+  const sbGameSearch = $('sb-game-search');
+  if (sbGameSearch) sbGameSearch.addEventListener('input', renderSidebarGameList);
+
+  // Sidebar PQA game name search
+  const sbPqaGameSearch = $('sb-pqa-game-search');
+  if (sbPqaGameSearch) sbPqaGameSearch.addEventListener('input', renderPQASidebarGameList);
 
   // Chart control changes
   ui.statusCol.addEventListener('change', renderStatus);
