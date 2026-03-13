@@ -1,0 +1,21 @@
+====================================================
+  DataViz Pro — Apni Excel file yahan rakho
+====================================================
+
+STEPS:
+------
+1. Apni Excel file ka naam badlo:  data.xlsx
+2. Us file ko IS FOLDER mein paste karo
+   (jahan yeh .txt file hai, wahin)
+
+3. VS Code mein index.html pe right-click karo
+4. "Open with Live Server" click karo
+5. Dashboard automatically tumhari file load kar lega!
+
+----------------------------------------------------
+Supported formats: .xlsx  .xls  .csv
+----------------------------------------------------
+
+NOTE: File ka naam "data.xlsx" hona ZAROORI hai
+      (ya data.xls ya data.csv bhi chalega)
+====================================================

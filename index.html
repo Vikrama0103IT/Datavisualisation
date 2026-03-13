@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataViz Pro</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- html2canvas — capture DOM as image -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <!-- jsPDF — convert image to PDF -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ====== UPLOAD SCREEN ====== -->
+  <div id="upload-screen" class="upload-screen">
+    <div class="upload-card">
+      <div class="upload-logo">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="#F2C811"/>
+          <path d="M12 36V28M20 36V20M28 36V24M36 36V16" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <span>DataViz Pro</span>
+      </div>
+      <h1>Visualize Your Data Instantly</h1>
+      <p>Upload any Excel or CSV file to generate an interactive PowerBI-style dashboard</p>
+      <div id="auto-load-hint" class="auto-load-hint" style="display:none">
+        <span>&#9432;</span> Tip: Place your file as <strong>data.xlsx</strong> in this folder and open via <strong>Live Server</strong> — it will load automatically every time.
+      </div>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <p class="drop-title">Drag &amp; drop your file here</p>
+        <p class="drop-sub">or</p>
+        <button class="btn-primary" id="btn-browse" type="button">Browse Files</button>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden />
+        <p class="drop-formats">Supports .xlsx, .xls, .csv</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== DASHBOARD ====== -->
+  <div id="dashboard" class="dashboard hidden">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <button class="btn-sidebar-toggle" id="btn-sidebar-toggle" aria-label="Toggle sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <div class="header-logo">
+          <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+            <rect width="48" height="48" rx="10" fill="#F2C811"/>
+            <path d="M12 36V28M20 36V20M28 36V24M36 36V16" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-text">QA Games in 2025- 2026</span>
+        </div>
+        <div class="sheet-tabs" id="sheet-tabs"></div>
+      </div>
+      <div class="header-right">
+        <span id="file-name-display" class="file-name"></span>
+        <div id="sync-status" class="sync-status hidden">
+          <span class="sync-dot"></span>
+          <span id="sync-label">Live sync</span>
+        </div>
+        <button class="btn-ghost" id="btn-new-file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          New File
+        </button>
+        <button class="btn-accent" id="btn-export">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15h6M9 18h4"/>
+          </svg>
+          Export PDF
+        </button>
+      </div>
+    </header>
+
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    <div class="main-layout">
+
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+          <h3 class="sidebar-title">Fields</h3>
+          <div id="field-list" class="field-list"></div>
+        </div>
+        <div class="sidebar-section">
+          <h3 class="sidebar-title">Filters</h3>
+          <div id="filter-list" class="filter-list"></div>
+        </div>
+        <div class="sidebar-section">
+          <button class="btn-reset" id="btn-reset-filters">Reset All Filters</button>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="content" id="content">
+
+        <!-- Hero Total Count -->
+        <div class="hero-section">
+          <div class="hero-card">
+            <div class="hero-card-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+            </div>
+            <div class="hero-card-body">
+              <div class="hero-card-label">Total QA Games</div>
+              <div class="hero-card-value" id="hero-total">—</div>
+              <div class="hero-card-sub" id="hero-sub"></div>
+            </div>
+          </div>
+
+          <div class="plat-kpi" id="kpi-sp">
+            <div class="plat-kpi-label">SP</div>
+            <div class="plat-kpi-value" id="kpi-sp-val">—</div>
+            <div class="plat-kpi-sub">Smart Phone</div>
+          </div>
+
+          <div class="plat-kpi" id="kpi-stb">
+            <div class="plat-kpi-label">STB</div>
+            <div class="plat-kpi-value" id="kpi-stb-val">—</div>
+            <div class="plat-kpi-sub">Set Top Box</div>
+          </div>
+
+          <div class="plat-kpi" id="kpi-jp">
+            <div class="plat-kpi-label">JP</div>
+            <div class="plat-kpi-value" id="kpi-jp-val">—</div>
+            <div class="plat-kpi-sub">Jio Phone</div>
+          </div>
+        </div>
+
+        <!-- Status + Platform Charts -->
+        <div class="charts-grid">
+
+          <!-- Game Status -->
+          <div class="chart-card" id="status-card">
+            <div class="chart-card-header">
+              <h3></h3>
+              <div class="chart-controls">
+                <select id="status-col" class="ctrl-select"></select>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="status-chart"></canvas></div>
+          </div>
+
+          <!-- Platform -->
+          <div class="chart-card" id="platform-card">
+            <div class="chart-card-header">
+              <h3></h3>
+              <div class="chart-controls">
+                <select id="platform-col" class="ctrl-select"></select>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="platform-chart"></canvas></div>
+          </div>
+
+        </div>
+
+        <!-- ====== PQA SLIDE SECTION ====== -->
+        <div class="slide-section hidden" id="pqa-section">
+
+          <!-- PQA Slide Header -->
+          <div class="slide-header">
+            <div class="slide-header-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="slide-title">PQA Games — 2025 / 2026</h2>
+              <p class="slide-sub">Pre-QA testing overview &nbsp;·&nbsp; Sheet: <span id="pqa-sheet-label">—</span></p>
+            </div>
+          </div>
+
+          <!-- PQA Hero KPIs -->
+          <div class="hero-section">
+            <div class="hero-card pqa-hero-card">
+              <div class="hero-card-icon pqa-hero-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                </svg>
+              </div>
+              <div class="hero-card-body">
+                <div class="hero-card-label">Total PQA Games</div>
+                <div class="hero-card-value pqa-accent" id="pqa-hero-total">—</div>
+                <div class="hero-card-sub" id="pqa-hero-sub"></div>
+              </div>
+            </div>
+
+            <div class="plat-kpi" id="pqa-kpi-sp">
+              <div class="plat-kpi-label">SP</div>
+              <div class="plat-kpi-value" id="pqa-kpi-sp-val">—</div>
+              <div class="plat-kpi-sub">Smart Phone</div>
+            </div>
+
+            <div class="plat-kpi" id="pqa-kpi-stb">
+              <div class="plat-kpi-label">STB</div>
+              <div class="plat-kpi-value" id="pqa-kpi-stb-val">—</div>
+              <div class="plat-kpi-sub">Set Top Box</div>
+            </div>
+
+            <div class="plat-kpi" id="pqa-kpi-jp">
+              <div class="plat-kpi-label">JP</div>
+              <div class="plat-kpi-value" id="pqa-kpi-jp-val">—</div>
+              <div class="plat-kpi-sub">Jio Phone</div>
+            </div>
+          </div>
+
+          <!-- PQA Charts -->
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3>PQA Status Distribution</h3>
+                <div class="chart-controls">
+                  <select id="pqa-status-col" class="ctrl-select"></select>
+                </div>
+              </div>
+              <div class="chart-wrap"><canvas id="pqa-status-chart"></canvas></div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3>PQA Platform Breakdown</h3>
+                <div class="chart-controls">
+                  <select id="pqa-platform-col" class="ctrl-select"></select>
+                </div>
+              </div>
+              <div class="chart-wrap"><canvas id="pqa-platform-chart"></canvas></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <h3>Data Table</h3>
+            <div class="table-controls">
+              <input type="text" id="table-search" class="search-input" placeholder="Search all columns..." />
+              <span id="row-count" class="row-count"></span>
+            </div>
+          </div>
+          <div class="table-wrap" id="table-wrap">
+            <table id="data-table">
+              <thead id="table-head"></thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <button class="btn-ghost" id="btn-prev">&#8249; Prev</button>
+            <span id="page-info"></span>
+            <button class="btn-ghost" id="btn-next">Next &#8250;</button>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <p>Processing file...</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
