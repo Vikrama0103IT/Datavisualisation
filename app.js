@@ -12,6 +12,24 @@ const pqaState = {
   sheetName: null,
 };
 
+const liveState = {
+  data: [],
+  columns: [],
+  sheetName: null,
+};
+
+const premiumState = {
+  data: [],
+  columns: [],
+  sheetName: null,
+};
+
+const gamesnacksState = {
+  data: [],
+  columns: [],
+  sheetName: null,
+};
+
 const state = {
   workbook: null,       // XLSX workbook
   sheetName: null,      // active sheet
@@ -56,8 +74,10 @@ const ui = {
   btnReset: $('btn-reset-filters'),
   statusCol: $('status-col'),
   platformCol: $('platform-col'),
-  pqaStatusCol:   $('pqa-status-col'),
-  pqaPlatformCol: $('pqa-platform-col'),
+  pqaStatusCol:    $('pqa-status-col'),
+  pqaPlatformCol:  $('pqa-platform-col'),
+  liveStatusCol:   $('live-status-col'),
+  livePlatformCol: $('live-platform-col'),
 };
 
 // ── Colour palette ─────────────────────────────────────────────────────────
@@ -125,6 +145,9 @@ function loadFromBuffer(buffer, fileName, silent = false) {
   ui.fileNameDisplay.textContent = fileName;
   buildSheetTabs(wb);
   loadPQASection(wb);
+  loadLiveSection(wb);
+  loadPremiumSection(wb);
+  loadGameSnacksSection(wb);
 
   if (silent) {
     // Keep everything the user had — just refresh data
@@ -202,11 +225,31 @@ function buildSheetTabs(wb) {
   });
 }
 
+// Map sheet names to display metadata
+function getSheetMeta(name) {
+  const n = name.toLowerCase();
+  if (/pqa/.test(n))                        return { title: 'PQA Games — 2025 / 2026',     sub: 'Pre-QA testing overview',  hero: 'Total PQA Games'    };
+  if (/live/.test(n))                       return { title: 'Live Games — 2025 / 2026',    sub: 'Live games overview',      hero: 'Total Live Games'   };
+  if (/premium/.test(n))                    return { title: 'Premium Games — 2025 / 2026', sub: 'Premium games overview',   hero: 'Total Premium Games' };
+  if (/game\s*snack/.test(n))               return { title: 'GameSnacks — 2025 / 2026',    sub: 'GameSnacks overview',      hero: 'Total GameSnacks'   };
+  return                                           { title: 'QA Games — 2025 / 2026',      sub: 'QA testing overview',      hero: 'Total QA Games'     };
+}
+
 function loadSheet(name) {
   state.sheetName = name;
   document.querySelectorAll('.sheet-tab').forEach(t => {
     t.classList.toggle('active', t.textContent === name);
   });
+
+  // Update slide header text dynamically
+  const meta = getSheetMeta(name);
+  const titleEl = $('qa-slide-title');
+  const subEl   = $('qa-slide-sub-text');
+  const heroLbl = $('hero-card-label');
+  if (titleEl) titleEl.textContent = meta.title;
+  if (subEl)   subEl.textContent   = meta.sub;
+  if (heroLbl) heroLbl.textContent = meta.hero;
+
   const qaLabel = $('qa-sheet-label');
   if (qaLabel) qaLabel.textContent = name;
   const ws = state.workbook.Sheets[name];
@@ -259,6 +302,27 @@ function showUpload() {
   if (sbPqaCount) sbPqaCount.textContent = '';
   const sbPqaSearch = $('sb-pqa-game-search');
   if (sbPqaSearch) sbPqaSearch.value = '';
+
+  // Reset Live
+  liveState.data = [];
+  liveState.columns = [];
+  liveState.sheetName = null;
+  const liveSec = $('live-section');
+  if (liveSec) liveSec.classList.add('hidden');
+
+  // Reset Premium
+  premiumState.data = [];
+  premiumState.columns = [];
+  premiumState.sheetName = null;
+  const premiumSec = $('premium-section');
+  if (premiumSec) premiumSec.classList.add('hidden');
+
+  // Reset GameSnacks
+  gamesnacksState.data = [];
+  gamesnacksState.columns = [];
+  gamesnacksState.sheetName = null;
+  const gsSec = $('gamesnacks-section');
+  if (gsSec) gsSec.classList.add('hidden');
 }
 
 // ── Filters ────────────────────────────────────────────────────────────────
@@ -371,18 +435,18 @@ function renderKPIs() {
     ? `${total.toLocaleString('en-IN')} filtered  /  ${rawTotal.toLocaleString('en-IN')} total`
     : `${rawTotal.toLocaleString('en-IN')} total records`;
 
-  // Platform counts — reuse aggregate() with the same column as the Platform chart
   const platCol = ui.platformCol ? ui.platformCol.value : '';
   if (platCol) {
     const counts = aggregate(state.filteredData, platCol, '__count__', 'count', 'none');
-    const find = tag => {
-      const t = tag.toLowerCase();
-      const hit = counts.find(e => e.key.toLowerCase().includes(t));
-      return hit ? hit.value.toLocaleString('en-IN') : '0';
+    const find = (...tags) => {
+      const total = counts
+        .filter(e => tags.some(t => e.key.toLowerCase().includes(t.toLowerCase())))
+        .reduce((sum, e) => sum + e.value, 0);
+      return total ? total.toLocaleString('en-IN') : '0';
     };
-    $('kpi-sp-val').textContent  = find('sp');
+    $('kpi-sp-val').textContent  = find('sp', 'mobile', 'smartphone');
     $('kpi-stb-val').textContent = find('stb');
-    $('kpi-jp-val').textContent  = find('jp');
+    $('kpi-jp-val').textContent  = find('jp', 'jiophone', 'jio phone', 'candy');
   }
 }
 
@@ -660,6 +724,27 @@ async function exportAllVisuals() {
       pdf.addImage(pqaChartsSnap.data, 'JPEG', offX2, y2, W2, pqaChartsSnap.mmH * fit2);
     }
 
+    // ── PAGE 3: Live Slide (only if section is visible) ───────────────────────
+    const liveSection = $('live-section');
+    if (liveSection && !liveSection.classList.contains('hidden') && liveState.data.length) {
+      pdf.addPage();
+      pg++;
+
+      const liveHeroSnap = await snap(liveSection.querySelector('.hero-section'));
+      const liveGridSnap = await snap(liveSection.querySelector('.charts-grid'));
+
+      const totalH3 = liveHeroSnap.mmH + GAP + liveGridSnap.mmH;
+      const fit3    = totalH3 > UH ? UH / totalH3 : 1;
+      const W3      = UW * fit3;
+      const offX3   = M + (UW - W3) / 2;
+
+      drawHdr();
+      let y3 = HDR + M;
+      pdf.addImage(liveHeroSnap.data, 'JPEG', offX3, y3, W3, liveHeroSnap.mmH * fit3);
+      y3 += liveHeroSnap.mmH * fit3 + GAP;
+      pdf.addImage(liveGridSnap.data, 'JPEG', offX3, y3, W3, liveGridSnap.mmH * fit3);
+    }
+
     pdf.save(fileName + '_dashboard.pdf');
 
   } catch (err) {
@@ -818,6 +903,244 @@ function renderPQAPlatform() {
   });
 }
 
+// ── Premium Slide ───────────────────────────────────────────────────────────
+
+function loadPremiumSection(wb) {
+  const premSheet   = wb.SheetNames.find(n => n.toLowerCase().includes('premium'));
+  const premSection = $('premium-section');
+
+  if (!premSheet || !premSection) {
+    if (premSection) premSection.classList.add('hidden');
+    return;
+  }
+
+  premiumState.sheetName = premSheet;
+  premiumState.data    = XLSX.utils.sheet_to_json(wb.Sheets[premSheet], { defval: '' });
+  premiumState.columns = detectColumns(premiumState.data);
+
+  const sheetLabel = $('premium-sheet-label');
+  if (sheetLabel) sheetLabel.textContent = premSheet;
+
+  const total = premiumState.data.length;
+  $('premium-hero-total').textContent = total.toLocaleString('en-IN');
+  $('premium-hero-sub').textContent   = `${total.toLocaleString('en-IN')} total records`;
+
+  premSection.classList.remove('hidden');
+  renderPremiumList();
+}
+
+function renderPremiumList() {
+  const listEl  = $('premium-game-list');
+  const countEl = $('premium-search-count');
+  if (!listEl) return;
+
+  const cols = premiumState.columns;
+  if (!cols.length || !premiumState.data.length) {
+    listEl.innerHTML = '<div class="premium-game-empty">No premium data loaded</div>';
+    return;
+  }
+
+  // Detect game name column
+  const nameCol = (
+    cols.find(c => /game.?name/i.test(c.name))  ||
+    cols.find(c => /game.?title/i.test(c.name)) ||
+    cols.find(c => /\bname\b/i.test(c.name))    ||
+    cols.find(c => /\btitle\b/i.test(c.name))   ||
+    cols.find(c => c.type === 'text')            ||
+    cols[0]
+  );
+
+  // Detect partner column
+  const partnerCol = (
+    cols.find(c => /partner/i.test(c.name))     ||
+    cols.find(c => /publisher/i.test(c.name))   ||
+    cols.find(c => /developer/i.test(c.name))   ||
+    cols.find(c => /studio/i.test(c.name))      ||
+    cols.find(c => /vendor/i.test(c.name))      ||
+    null
+  );
+
+  const query = ($('premium-search')?.value || '').trim().toLowerCase();
+
+  let rows = premiumState.data;
+  if (query) {
+    rows = rows.filter(row =>
+      Object.values(row).some(v => String(v).toLowerCase().includes(query))
+    );
+  }
+
+  if (countEl) countEl.textContent = rows.length + ' / ' + premiumState.data.length;
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="premium-game-empty">No games found</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map((row, i) => {
+    const name    = escHtml(String(row[nameCol.name]           || '—').trim());
+    const partner = partnerCol ? escHtml(String(row[partnerCol.name] || '').trim()) : '';
+    return `<button class="premium-game-item" data-idx="${i}">
+      <span class="premium-game-num">${i + 1}.</span>
+      <span class="premium-game-info">
+        <span class="premium-game-name">${name}</span>
+        ${partner ? `<span class="premium-game-partner">${partner}</span>` : ''}
+      </span>
+      <span class="premium-game-arrow">›</span>
+    </button>`;
+  }).join('');
+
+  listEl.querySelectorAll('.premium-game-item').forEach((btn, i) => {
+    btn.addEventListener('click', () => showGameDetail(rows[i], premiumState.columns, 'premium'));
+  });
+}
+
+// ── GameSnacks Slide ────────────────────────────────────────────────────────
+
+function loadGameSnacksSection(wb) {
+  const gsSheet   = wb.SheetNames.find(n => /game\s*snacks/i.test(n));
+  const gsSection = $('gamesnacks-section');
+
+  if (!gsSheet || !gsSection) {
+    if (gsSection) gsSection.classList.add('hidden');
+    return;
+  }
+
+  gamesnacksState.sheetName = gsSheet;
+  gamesnacksState.data    = XLSX.utils.sheet_to_json(wb.Sheets[gsSheet], { defval: '' });
+  gamesnacksState.columns = detectColumns(gamesnacksState.data);
+
+  const sheetLabel = $('gs-sheet-label');
+  if (sheetLabel) sheetLabel.textContent = gsSheet;
+
+  const total = gamesnacksState.data.length;
+  $('gs-hero-total').textContent = total.toLocaleString('en-IN');
+  $('gs-hero-sub').textContent   = `${total.toLocaleString('en-IN')} total records`;
+
+  gsSection.classList.remove('hidden');
+  renderGameSnacksList();
+}
+
+function renderGameSnacksList() {
+  const listEl  = $('gs-game-list');
+  const countEl = $('gs-search-count');
+  if (!listEl) return;
+
+  const cols = gamesnacksState.columns;
+  if (!cols.length || !gamesnacksState.data.length) {
+    listEl.innerHTML = '<div class="gs-game-empty">No GameSnacks data loaded</div>';
+    return;
+  }
+
+  const nameCol = (
+    cols.find(c => /game.?name/i.test(c.name))  ||
+    cols.find(c => /game.?title/i.test(c.name)) ||
+    cols.find(c => /\bname\b/i.test(c.name))    ||
+    cols.find(c => /\btitle\b/i.test(c.name))   ||
+    cols.find(c => c.type === 'text')            ||
+    cols[0]
+  );
+
+  const partnerCol = (
+    cols.find(c => /partner/i.test(c.name))   ||
+    cols.find(c => /publisher/i.test(c.name)) ||
+    cols.find(c => /developer/i.test(c.name)) ||
+    cols.find(c => /studio/i.test(c.name))    ||
+    cols.find(c => /vendor/i.test(c.name))    ||
+    null
+  );
+
+  const query = ($('gs-search')?.value || '').trim().toLowerCase();
+
+  let rows = gamesnacksState.data;
+  if (query) {
+    rows = rows.filter(row =>
+      Object.values(row).some(v => String(v).toLowerCase().includes(query))
+    );
+  }
+
+  if (countEl) countEl.textContent = rows.length + ' / ' + gamesnacksState.data.length;
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="gs-game-empty">No games found</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map((row, i) => {
+    const name    = escHtml(String(row[nameCol.name]                || '—').trim());
+    const partner = partnerCol ? escHtml(String(row[partnerCol.name] || '').trim()) : '';
+    return `<button class="gs-game-item" data-idx="${i}">
+      <span class="gs-game-num">${i + 1}.</span>
+      <span class="gs-game-info">
+        <span class="gs-game-name">${name}</span>
+        ${partner ? `<span class="gs-game-partner">${partner}</span>` : ''}
+      </span>
+      <span class="gs-game-arrow">›</span>
+    </button>`;
+  }).join('');
+
+  listEl.querySelectorAll('.gs-game-item').forEach((btn, i) => {
+    btn.addEventListener('click', () => showGameDetail(rows[i], gamesnacksState.columns, 'gamesnacks'));
+  });
+}
+
+function renderLiveSerialList() {
+  const listEl  = $('live-serial-list');
+  const countEl = $('live-serial-count');
+  if (!listEl) return;
+
+  const platCol = ui.livePlatformCol ? ui.livePlatformCol.value : '';
+
+  // Detect game name column
+  const cols = liveState.columns;
+  const nameCol = (
+    cols.find(c => /game.?name/i.test(c.name))  ||
+    cols.find(c => /game.?title/i.test(c.name)) ||
+    cols.find(c => /\bname\b/i.test(c.name))    ||
+    cols.find(c => /\btitle\b/i.test(c.name))   ||
+    cols.find(c => c.type === 'text')            ||
+    cols[0] || null
+  );
+
+  if (!nameCol || !liveState.data.length) {
+    listEl.innerHTML = '<div class="live-serial-empty">No data loaded</div>';
+    return;
+  }
+
+  // Exclude StoreFront rows
+  let rows = platCol
+    ? liveState.data.filter(row => !/store\s*front/i.test(String(row[platCol] || '')))
+    : liveState.data;
+
+  // Apply search filter
+  const query = ($('live-serial-search')?.value || '').trim().toLowerCase();
+  if (query) {
+    rows = rows.filter(row => String(row[nameCol.name] || '').toLowerCase().includes(query));
+  }
+
+  if (countEl) countEl.textContent = rows.length + ' games';
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="live-serial-empty">No games found</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map((row, i) => {
+    const name = escHtml(String(row[nameCol.name] || '—').trim());
+    const plat = platCol ? escHtml(String(row[platCol] || '').trim()) : '';
+    return `<button class="live-serial-item" data-idx="${i}" title="Click to view details">
+      <span class="live-serial-num">${i + 1}.</span>
+      <span class="live-serial-name">${name}</span>
+      ${plat ? `<span class="live-serial-plat">${plat}</span>` : ''}
+      <span class="live-serial-arrow">›</span>
+    </button>`;
+  }).join('');
+
+  // Click → show full detail modal
+  listEl.querySelectorAll('.live-serial-item').forEach((btn, i) => {
+    btn.addEventListener('click', () => showGameDetail(rows[i], liveState.columns, 'live'));
+  });
+}
+
 // ── Helper: escape HTML ────────────────────────────────────────────────────
 function escHtml(str) {
   return String(str)
@@ -903,10 +1226,15 @@ function getStatusBadgeClass(value) {
 }
 
 // cols   — column definitions to use (state.columns for QA, pqaState.columns for PQA)
-// isPQA  — true → show purple PQA header accent
-function showGameDetail(row, cols, isPQA) {
+// theme  — 'pqa' → purple, 'live' → green, else default; also accepts true for legacy PQA calls
+function showGameDetail(row, cols, theme) {
   cols = cols || state.columns;
   if (!cols.length) return;
+
+  const isPQA        = theme === 'pqa' || theme === true;
+  const isLive       = theme === 'live';
+  const isPremium    = theme === 'premium';
+  const isGameSnacks = theme === 'gamesnacks';
 
   const titleCol =
     cols.find(c => /game.?name/i.test(c.name))  ||
@@ -919,20 +1247,20 @@ function showGameDetail(row, cols, isPQA) {
   const title = String(row[titleCol.name] || '—');
   $('game-modal-title').textContent = title;
 
-  // Header colour: purple for PQA, default dark for QA
+  // Header colour: purple for PQA, green for Live, default dark for QA
   const modalHeader = document.querySelector('.game-modal-header');
   if (modalHeader) {
-    modalHeader.style.background = isPQA ? '#2d1b4e' : '';
+    modalHeader.style.background = isPQA ? '#2d1b4e' : isLive ? '#0d3322' : isPremium ? '#431407' : isGameSnacks ? '#0c2340' : '';
   }
   const modalLabel = document.querySelector('.game-modal-label');
   if (modalLabel) {
-    modalLabel.textContent = isPQA ? 'PQA Game Details' : 'Game Details';
-    modalLabel.style.color = isPQA ? '#a855f7' : '';
+    modalLabel.textContent = isPQA ? 'PQA Game Details' : isLive ? 'Live Game Details' : isPremium ? 'Premium Game Details' : isGameSnacks ? 'GameSnacks Details' : 'Game Details';
+    modalLabel.style.color = isPQA ? '#a855f7' : isLive ? '#10b981' : isPremium ? '#f97316' : isGameSnacks ? '#06b6d4' : '';
   }
   const modalIcon = document.querySelector('.game-modal-icon');
   if (modalIcon) {
-    modalIcon.style.background = isPQA ? 'rgba(168,85,247,0.15)' : '';
-    modalIcon.style.color      = isPQA ? '#a855f7' : '';
+    modalIcon.style.background = isPQA ? 'rgba(168,85,247,0.15)' : isLive ? 'rgba(16,185,129,0.15)' : isPremium ? 'rgba(249,115,22,0.15)' : isGameSnacks ? 'rgba(6,182,212,0.15)' : '';
+    modalIcon.style.color      = isPQA ? '#a855f7' : isLive ? '#10b981' : isPremium ? '#f97316' : isGameSnacks ? '#06b6d4' : '';
   }
 
   const statusKeywords = ['status', 'state', 'result', 'pass', 'fail', 'qa', 'pqa', 'approval', 'review'];
@@ -1028,6 +1356,163 @@ function renderPQASidebarGameList() {
 function hideGameDetail() {
   $('game-detail-modal').classList.add('hidden');
   document.body.style.overflow = '';
+}
+
+// ── Live Slide ──────────────────────────────────────────────────────────────
+
+function loadLiveSection(wb) {
+  const liveSheet  = wb.SheetNames.find(n => n.toLowerCase().includes('live'));
+  const liveSection = $('live-section');
+
+  if (!liveSheet || !liveSection) {
+    if (liveSection) liveSection.classList.add('hidden');
+    return;
+  }
+
+  liveState.sheetName = liveSheet;
+  liveState.data    = XLSX.utils.sheet_to_json(wb.Sheets[liveSheet], { defval: '' });
+  liveState.columns = detectColumns(liveState.data);
+
+  const sheetLabel = $('live-sheet-label');
+  if (sheetLabel) sheetLabel.textContent = liveSheet;
+
+  // Populate column selects
+  const catCols = liveState.columns.filter(c => c.type !== 'number').map(c => c.name);
+  const choices  = catCols.length ? catCols : liveState.columns.map(c => c.name);
+  const opts = choices.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
+  if (ui.liveStatusCol)   ui.liveStatusCol.innerHTML   = opts;
+  if (ui.livePlatformCol) ui.livePlatformCol.innerHTML = opts;
+
+  function detect(keywords) {
+    return choices.find(c => keywords.some(k => c.toLowerCase().includes(k))) || choices[0] || '';
+  }
+  const sDef = detect(['status', 'state', 'result', 'pass', 'fail', 'live', 'qa']);
+  const pDef = detect(['platform', 'device', 'type', 'sp', 'stb', 'jp']);
+
+  if (ui.liveStatusCol && sDef) ui.liveStatusCol.value = sDef;
+  if (ui.livePlatformCol) {
+    const useP = pDef && pDef !== ui.liveStatusCol?.value
+      ? pDef
+      : (choices.find(c => c !== (ui.liveStatusCol?.value || '')) || pDef);
+    if (useP) ui.livePlatformCol.value = useP;
+  }
+
+  liveSection.classList.remove('hidden');
+  renderLiveKPIs();
+  renderLiveCharts();
+  renderLiveSerialList();
+}
+
+function renderLiveKPIs() {
+  const platCol = ui.livePlatformCol ? ui.livePlatformCol.value : '';
+
+  // Exclude StoreFront rows from all Live KPI calculations
+  const liveData = platCol
+    ? liveState.data.filter(row => !/store\s*front/i.test(String(row[platCol] || '')))
+    : liveState.data;
+
+  const total = liveData.length;
+  $('live-hero-total').textContent = total.toLocaleString('en-IN');
+  $('live-hero-sub').textContent   = `${total.toLocaleString('en-IN')} total records`;
+
+  if (platCol) {
+    const counts = aggregate(liveData, platCol, '__count__', 'count', 'none');
+
+    // Sum ALL entries whose key matches any of the given keywords
+    const find = (...tags) => {
+      const total = counts
+        .filter(e => tags.some(t => e.key.toLowerCase().includes(t.toLowerCase())))
+        .reduce((sum, e) => sum + e.value, 0);
+      return total ? total.toLocaleString('en-IN') : '0';
+    };
+
+    $('live-kpi-sp-val').textContent  = find('sp', 'mobile', 'smartphone');
+    $('live-kpi-stb-val').textContent = find('stb');
+    $('live-kpi-jp-val').textContent  = find('jp', 'jiophone', 'jio phone', 'candy');
+  }
+}
+
+function renderLiveCharts() {
+  renderLiveStatus();
+  renderLivePlatform();
+}
+
+function renderLiveStatus() {
+  destroyChart('liveStatus');
+  const col = ui.liveStatusCol ? ui.liveStatusCol.value : '';
+  if (!col || !liveState.data.length) return;
+
+  const entries = aggregate(liveState.data, col, '__count__', 'count', 'value_desc')
+    .filter(e => !/store\s*front/i.test(e.key))
+    .slice(0, 12);
+  const ctx = $('live-status-chart').getContext('2d');
+  state.charts.liveStatus = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e => e.key),
+      datasets: [{
+        data: entries.map(e => e.value),
+        backgroundColor: entries.map((_, i) => PALETTE[i % PALETTE.length] + 'e0'),
+        borderColor: '#fff',
+        borderWidth: 2,
+        hoverOffset: 10,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct   = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+              return ` ${ctx.label}: ${ctx.parsed}  (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderLivePlatform() {
+  destroyChart('livePlatform');
+  const col = ui.livePlatformCol ? ui.livePlatformCol.value : '';
+  if (!col || !liveState.data.length) return;
+
+  const entries = aggregate(liveState.data, col, '__count__', 'count', 'value_desc')
+    .filter(e => !/store\s*front/i.test(e.key))
+    .slice(0, 15);
+  const ctx = $('live-platform-chart').getContext('2d');
+  state.charts.livePlatform = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: entries.map(e => e.key),
+      datasets: [{
+        label: 'Live Games',
+        data: entries.map(e => e.value),
+        backgroundColor: entries.map((_, i) => PALETTE[i % PALETTE.length] + 'cc'),
+        borderColor:     entries.map((_, i) => PALETTE[i % PALETTE.length]),
+        borderWidth: 1,
+        borderRadius: 5,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      indexAxis: 'y',
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` Live Games: ${ctx.parsed.x}` } }
+      },
+      scales: {
+        y: { ticks: { font: { size: 11 } } },
+        x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
+      }
+    }
+  });
 }
 
 // ── Live-sync (File System Access API) ─────────────────────────────────────
@@ -1214,6 +1699,22 @@ function init() {
   // Sidebar PQA game name search
   const sbPqaGameSearch = $('sb-pqa-game-search');
   if (sbPqaGameSearch) sbPqaGameSearch.addEventListener('input', renderPQASidebarGameList);
+
+  // Live chart control changes
+  if (ui.liveStatusCol)   ui.liveStatusCol.addEventListener('change', renderLiveStatus);
+  if (ui.livePlatformCol) ui.livePlatformCol.addEventListener('change', () => { renderLiveKPIs(); renderLivePlatform(); });
+
+  // Live serial list search
+  const liveSerialSearch = $('live-serial-search');
+  if (liveSerialSearch) liveSerialSearch.addEventListener('input', renderLiveSerialList);
+
+  // Premium game search
+  const premiumSearch = $('premium-search');
+  if (premiumSearch) premiumSearch.addEventListener('input', renderPremiumList);
+
+  // GameSnacks search
+  const gsSearch = $('gs-search');
+  if (gsSearch) gsSearch.addEventListener('input', renderGameSnacksList);
 
   // Chart control changes
   ui.statusCol.addEventListener('change', renderStatus);

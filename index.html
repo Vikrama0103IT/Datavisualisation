@@ -147,12 +147,12 @@
             </svg>
           </div>
           <div>
-            <h2 class="slide-title">QA Games — 2025 / 2026</h2>
-            <p class="slide-sub">QA testing overview &nbsp;·&nbsp; Sheet: <span id="qa-sheet-label">—</span></p>
+            <h2 class="slide-title" id="qa-slide-title">QA Games — 2025 / 2026</h2>
+            <p class="slide-sub"><span id="qa-slide-sub-text">QA testing overview</span> &nbsp;·&nbsp; Sheet: <span id="qa-sheet-label">—</span></p>
           </div>
         </div>
 
-        <!-- Hero Total Count -->
+        <!-- Hero + Platform KPIs -->
         <div class="hero-section">
           <div class="hero-card">
             <div class="hero-card-icon">
@@ -163,7 +163,7 @@
               </svg>
             </div>
             <div class="hero-card-body">
-              <div class="hero-card-label">Total QA Games</div>
+              <div class="hero-card-label" id="hero-card-label">Total QA Games</div>
               <div class="hero-card-value" id="hero-total">—</div>
               <div class="hero-card-sub" id="hero-sub"></div>
             </div>
@@ -232,7 +232,7 @@
             </div>
           </div>
 
-          <!-- PQA Hero KPIs -->
+          <!-- PQA Hero + Platform KPIs -->
           <div class="hero-section">
             <div class="hero-card pqa-hero-card">
               <div class="hero-card-icon pqa-hero-icon">
@@ -288,6 +288,207 @@
               </div>
               <div class="chart-wrap"><canvas id="pqa-platform-chart"></canvas></div>
             </div>
+          </div>
+
+        </div>
+
+        <!-- ====== LIVE SLIDE SECTION ====== -->
+        <div class="slide-section live-slide-section hidden" id="live-section">
+
+          <!-- Live Slide Header -->
+          <div class="slide-header live-slide-header">
+            <div class="slide-header-icon live-slide-header-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>
+                <path d="M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="slide-title">Live Games — 2025 / 2026</h2>
+              <p class="slide-sub">Live games overview &nbsp;·&nbsp; Sheet: <span id="live-sheet-label">—</span></p>
+            </div>
+          </div>
+
+          <!-- Live Hero + Platform KPIs -->
+          <div class="hero-section">
+            <div class="hero-card live-hero-card">
+              <div class="hero-card-icon live-hero-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>
+                </svg>
+              </div>
+              <div class="hero-card-body">
+                <div class="hero-card-label">Total Live Games</div>
+                <div class="hero-card-value live-accent" id="live-hero-total">—</div>
+                <div class="hero-card-sub" id="live-hero-sub"></div>
+              </div>
+            </div>
+
+            <div class="plat-kpi" id="live-kpi-sp">
+              <div class="plat-kpi-label">SP</div>
+              <div class="plat-kpi-value" id="live-kpi-sp-val">—</div>
+              <div class="plat-kpi-sub">Smart Phone</div>
+            </div>
+
+            <div class="plat-kpi" id="live-kpi-stb">
+              <div class="plat-kpi-label">STB</div>
+              <div class="plat-kpi-value" id="live-kpi-stb-val">—</div>
+              <div class="plat-kpi-sub">Set Top Box</div>
+            </div>
+
+            <div class="plat-kpi" id="live-kpi-jp">
+              <div class="plat-kpi-label">JP</div>
+              <div class="plat-kpi-value" id="live-kpi-jp-val">—</div>
+              <div class="plat-kpi-sub">Jio Phone</div>
+            </div>
+          </div>
+
+          <!-- Live Charts -->
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3>Live Status Distribution</h3>
+                <div class="chart-controls">
+                  <select id="live-status-col" class="ctrl-select"></select>
+                </div>
+              </div>
+              <div class="chart-wrap"><canvas id="live-status-chart"></canvas></div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3>Live Platform Breakdown</h3>
+                <div class="chart-controls">
+                  <select id="live-platform-col" class="ctrl-select"></select>
+                </div>
+              </div>
+              <div class="chart-wrap"><canvas id="live-platform-chart"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Live Games Serial List -->
+          <div class="live-serial-wrap">
+            <div class="live-serial-header">
+              <h3 class="live-serial-title">Live Games List</h3>
+              <div class="live-serial-search-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="live-serial-search" class="live-serial-search-input" placeholder="Search game..." autocomplete="off" />
+              </div>
+              <span id="live-serial-count" class="live-serial-count"></span>
+            </div>
+            <div class="live-serial-list" id="live-serial-list"></div>
+          </div>
+
+        </div>
+
+        <!-- ====== PREMIUM SLIDE SECTION ====== -->
+        <div class="slide-section premium-slide-section hidden" id="premium-section">
+
+          <!-- Premium Slide Header -->
+          <div class="slide-header premium-slide-header">
+            <div class="slide-header-icon premium-slide-header-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="slide-title">Premium Games — 2025 / 2026</h2>
+              <p class="slide-sub">Premium games overview &nbsp;·&nbsp; Sheet: <span id="premium-sheet-label">—</span></p>
+            </div>
+          </div>
+
+          <!-- Premium KPI + Search in one row -->
+          <div class="premium-top-row">
+
+            <!-- Total KPI -->
+            <div class="hero-card premium-hero-card">
+              <div class="hero-card-icon premium-hero-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </div>
+              <div class="hero-card-body">
+                <div class="hero-card-label">Total Premium Games</div>
+                <div class="hero-card-value premium-accent" id="premium-hero-total">—</div>
+                <div class="hero-card-sub" id="premium-hero-sub"></div>
+              </div>
+            </div>
+
+            <!-- Search card -->
+            <div class="premium-search-card">
+              <div class="premium-search-header">
+                <span class="premium-search-label">Search Premium Games</span>
+                <span id="premium-search-count" class="premium-search-count"></span>
+              </div>
+              <div class="premium-search-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="premium-search" class="premium-search-input" placeholder="Type game or partner name..." autocomplete="off" />
+              </div>
+              <div class="premium-game-list" id="premium-game-list">
+                <div class="premium-game-empty">No premium data loaded</div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ====== GAMESNACKS SLIDE SECTION ====== -->
+        <div class="slide-section gs-slide-section hidden" id="gamesnacks-section">
+
+          <!-- GameSnacks Slide Header -->
+          <div class="slide-header gs-slide-header">
+            <div class="slide-header-icon gs-slide-header-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/>
+                <path d="M8 12h8M12 8v8"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="slide-title">GameSnacks — 2025 / 2026</h2>
+              <p class="slide-sub">GameSnacks overview &nbsp;·&nbsp; Sheet: <span id="gs-sheet-label">—</span></p>
+            </div>
+          </div>
+
+          <!-- GameSnacks KPI + Search -->
+          <div class="premium-top-row">
+
+            <div class="hero-card gs-hero-card">
+              <div class="hero-card-icon gs-hero-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/>
+                  <path d="M8 12h8M12 8v8"/>
+                </svg>
+              </div>
+              <div class="hero-card-body">
+                <div class="hero-card-label">Total GameSnacks</div>
+                <div class="hero-card-value gs-accent" id="gs-hero-total">—</div>
+                <div class="hero-card-sub" id="gs-hero-sub"></div>
+              </div>
+            </div>
+
+            <div class="gs-search-card">
+              <div class="gs-search-header">
+                <span class="gs-search-label">Search GameSnacks</span>
+                <span id="gs-search-count" class="gs-search-count"></span>
+              </div>
+              <div class="gs-search-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="gs-search" class="gs-search-input" placeholder="Type game or partner name..." autocomplete="off" />
+              </div>
+              <div class="gs-game-list" id="gs-game-list">
+                <div class="gs-game-empty">No GameSnacks data loaded</div>
+              </div>
+            </div>
+
           </div>
 
         </div>
