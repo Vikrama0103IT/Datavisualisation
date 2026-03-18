@@ -13,6 +13,8 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <!-- jsPDF — convert image to PDF -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <!-- MSAL.js — Microsoft Authentication Library -->
+  <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 </head>
 <body>
 
@@ -45,6 +47,59 @@
         <button class="btn-primary" id="btn-browse" type="button">Browse Files</button>
         <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden />
         <p class="drop-formats">Supports .xlsx, .xls, .csv</p>
+      </div>
+
+      <!-- ── Method 2: SharePoint / OneDrive (Graph API) ── -->
+      <div class="url-load-wrap">
+        <div class="url-load-or"><span>or connect SharePoint / OneDrive</span></div>
+
+        <!-- Not signed in state -->
+        <div id="sp-signin-area">
+          <button class="btn-ms-signin" id="btn-ms-signin" type="button">
+            <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
+              <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+            </svg>
+            Sign in with Microsoft to load from SharePoint
+          </button>
+          <p class="url-load-hint">&#9432;&nbsp; Sign in with your RIL account. The file <strong>dataforautomation.xlsx</strong> will be fetched directly from your OneDrive.</p>
+        </div>
+
+        <!-- ── Method 3: Paste URL directly (no sign-in) ── -->
+        <div class="url-paste-wrap">
+          <div class="url-load-or"><span>or paste OneDrive / SharePoint URL</span></div>
+          <div class="url-paste-row">
+            <input type="text" id="url-paste-input" class="url-paste-input"
+              placeholder="Paste sharing link or direct download URL here…" autocomplete="off" />
+            <button class="btn-url-load" id="btn-url-load" type="button">Load</button>
+          </div>
+          <p class="url-load-hint" id="url-load-status">
+            &#9432;&nbsp; OneDrive mein file share karo → <strong>"Copy link"</strong> karo → yahan paste karo.
+            File ka <strong>"Anyone with the link"</strong> access hona chahiye.
+          </p>
+        </div>
+
+        <!-- Signed in state -->
+        <div id="sp-signed-area" class="hidden">
+          <div class="sp-user-row">
+            <div class="sp-user-info">
+              <span class="sp-user-icon">&#128100;</span>
+              <span id="sp-user-name" class="sp-user-name">—</span>
+            </div>
+            <button class="btn-ghost sp-signout-btn" id="btn-ms-signout" type="button">Sign out</button>
+          </div>
+          <button class="btn-sp-load" id="btn-sp-load" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Load dataforautomation.xlsx from OneDrive
+          </button>
+          <p class="sp-load-status" id="sp-load-status"></p>
+        </div>
       </div>
     </div>
   </div>

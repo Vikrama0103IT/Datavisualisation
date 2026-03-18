@@ -5,6 +5,222 @@
 
 'use strict';
 
+// ── Microsoft Graph / SharePoint config ────────────────────────────────────
+// PASTE YOUR AZURE AD CLIENT ID BELOW (from portal.azure.com)
+const GRAPH_CONFIG = {
+  clientId: 'YOUR_CLIENT_ID_HERE',          // ← replace with your Azure AD App Client ID
+  tenantId: 'common',                        // use 'common' for any org account
+  redirectUri: window.location.origin + window.location.pathname,
+  scopes: ['User.Read', 'Files.Read'],
+  targetFile: 'dataforautomation.xlsx',      // file name to search in OneDrive
+};
+
+let msalInstance = null;
+
+function initMSAL() {
+  if (!window.msal) return; // MSAL library not loaded
+  if (GRAPH_CONFIG.clientId === 'YOUR_CLIENT_ID_HERE') return; // not configured yet
+  try {
+    msalInstance = new msal.PublicClientApplication({
+      auth: {
+        clientId: GRAPH_CONFIG.clientId,
+        authority: `https://login.microsoftonline.com/${GRAPH_CONFIG.tenantId}`,
+        redirectUri: GRAPH_CONFIG.redirectUri,
+      },
+      cache: { cacheLocation: 'sessionStorage' },
+    });
+    msalInstance.handleRedirectPromise().then(resp => {
+      if (resp) onMSALLogin(resp.account);
+      else {
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length) onMSALLogin(accounts[0]);
+      }
+    }).catch(err => console.error('MSAL redirect error:', err));
+  } catch (e) {
+    console.error('MSAL init error:', e);
+  }
+}
+
+function onMSALLogin(account) {
+  const signinArea  = document.getElementById('sp-signin-area');
+  const signedArea  = document.getElementById('sp-signed-area');
+  const nameEl      = document.getElementById('sp-user-name');
+  if (signinArea) signinArea.classList.add('hidden');
+  if (signedArea) signedArea.classList.remove('hidden');
+  if (nameEl) nameEl.textContent = account.name || account.username;
+}
+
+async function msSignIn() {
+  if (!msalInstance) {
+    alert('Microsoft sign-in is not configured yet.\n\nPaste your Azure AD Client ID into app.js (GRAPH_CONFIG.clientId).\nSee console for instructions.');
+    return;
+  }
+  try {
+    const resp = await msalInstance.loginPopup({ scopes: GRAPH_CONFIG.scopes });
+    onMSALLogin(resp.account);
+  } catch (err) {
+    if (err.errorCode !== 'user_cancelled') alert('Sign-in failed: ' + err.message);
+  }
+}
+
+function msSignOut() {
+  if (!msalInstance) return;
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length) msalInstance.logoutPopup({ account: accounts[0] });
+  const signinArea = document.getElementById('sp-signin-area');
+  const signedArea = document.getElementById('sp-signed-area');
+  if (signinArea) signinArea.classList.remove('hidden');
+  if (signedArea) signedArea.classList.add('hidden');
+}
+
+async function getGraphToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) throw new Error('Not signed in');
+  const resp = await msalInstance.acquireTokenSilent({
+    scopes: GRAPH_CONFIG.scopes,
+    account: accounts[0],
+  });
+  return resp.accessToken;
+}
+
+async function loadFromSharePoint() {
+  const statusEl = document.getElementById('sp-load-status');
+  function setStatus(msg, isErr = false) {
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    statusEl.style.color = isErr ? '#ef4444' : '#10b981';
+  }
+
+  if (!msalInstance) { alert('MSAL not initialised.'); return; }
+  showLoading();
+  setStatus('Connecting to OneDrive…');
+  try {
+    const token = await getGraphToken();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Search for the file by name in the user's OneDrive
+    setStatus('Searching for ' + GRAPH_CONFIG.targetFile + '…');
+    const searchRes = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(GRAPH_CONFIG.targetFile)}')`,
+      { headers }
+    );
+    if (!searchRes.ok) throw new Error(`Graph search failed: ${searchRes.status}`);
+    const searchJson = await searchRes.json();
+    const match = (searchJson.value || []).find(
+      f => f.name.toLowerCase() === GRAPH_CONFIG.targetFile.toLowerCase()
+    );
+    if (!match) throw new Error(`File "${GRAPH_CONFIG.targetFile}" not found in your OneDrive.`);
+
+    // Download the file content
+    setStatus('Downloading file…');
+    const dlRes = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${match.id}/content`,
+      { headers }
+    );
+    if (!dlRes.ok) throw new Error(`Download failed: ${dlRes.status}`);
+    const buffer = await dlRes.arrayBuffer();
+    setStatus('Loaded successfully!');
+    loadFromBuffer(buffer, match.name);
+  } catch (err) {
+    console.error('SharePoint load error:', err);
+    setStatus('Error: ' + err.message, true);
+    hideLoading();
+  }
+}
+
+// ── Load from pasted URL (no sign-in required) ─────────────────────────────
+function toDownloadUrl(url) {
+  // SharePoint / OneDrive share links → add download=1 to force binary download
+  if (
+    (url.includes('sharepoint.com') || url.includes('1drv.ms') || url.includes('onedrive.live.com')) &&
+    !url.includes('download=1')
+  ) {
+    return url.includes('?') ? url + '&download=1' : url + '?download=1';
+  }
+  return url;
+}
+
+function isExcelBuffer(buffer) {
+  // XLSX/ZIP magic bytes: PK (0x50 0x4B)
+  const b = new Uint8Array(buffer.slice(0, 4));
+  return b[0] === 0x50 && b[1] === 0x4B;
+}
+
+async function loadFromUrl() {
+  const input    = document.getElementById('url-paste-input');
+  const statusEl = document.getElementById('url-load-status');
+  const url      = (input ? input.value : '').trim();
+
+  function setStatus(html, isErr = false) {
+    if (!statusEl) return;
+    statusEl.innerHTML = html;
+    statusEl.style.color = isErr ? '#ef4444' : '#10b981';
+  }
+
+  function showDownloadFallback(rawUrl) {
+    setStatus(
+      `CORS block: Browser directly fetch nahi kar sakta (SharePoint security).<br>
+       <strong>Solution:</strong>
+       <a href="${rawUrl}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline;">
+         Yahan click karo → file download hogi
+       </a>
+       — phir us downloaded file ko <strong>drag &amp; drop</strong> karo ya <strong>Browse</strong> se upload karo.`,
+      true
+    );
+  }
+
+  if (!url) { setStatus('Pehle URL paste karo.', true); return; }
+
+  showLoading();
+  setStatus('File fetch ho rahi hai…');
+  const downloadUrl = toDownloadUrl(url);
+  const fileName = url.split('/').pop().split('?')[0] || 'loaded-file.xlsx';
+
+  // ── Attempt 1: Direct fetch ──────────────────────────────────────────────
+  try {
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (!isExcelBuffer(buffer)) throw new Error('not_excel');
+    setStatus('Successfully loaded!');
+    loadFromBuffer(buffer, fileName);
+    return;
+  } catch (e1) {
+    if (e1.message === 'not_excel') {
+      hideLoading();
+      showDownloadFallback(url);
+      return;
+    }
+    // CORS / network error → try proxy
+  }
+
+  // ── Attempt 2: CORS proxy (works for publicly shared files) ─────────────
+  setStatus('Direct fetch blocked — CORS proxy try ho rahi hai…');
+  try {
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl);
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (!isExcelBuffer(buffer)) throw new Error('not_excel');
+    setStatus('Successfully loaded (via proxy)!');
+    loadFromBuffer(buffer, fileName);
+    return;
+  } catch (e2) {
+    hideLoading();
+    if (e2.message === 'not_excel') {
+      setStatus(
+        'File access nahi hui — SharePoint mein login required hai.<br>' +
+        '<strong>Options:</strong> (1) File ko publicly share karo &nbsp;|&nbsp; ' +
+        '(2) <a href="' + url + '" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline;">Download karo</a> ' +
+        'phir drag-drop karo &nbsp;|&nbsp; (3) Microsoft Sign-in use karo (upar)',
+        true
+      );
+    } else {
+      showDownloadFallback(url);
+    }
+  }
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 const pqaState = {
   data: [],
@@ -192,7 +408,11 @@ function handleFile(file) {
 // Auto-load: tries to fetch 'data.xlsx' from the same folder
 // Works when opened via VS Code Live Server (not raw file://)
 async function autoLoadDefaultFile() {
-  const candidates = ['data/data.xlsx', 'data/data.xls', 'data/data.csv', 'data.xlsx', 'data.xls', 'data.csv'];
+  const candidates = [
+    'data/data.xlsx', 'data/data.xls', 'data/data.csv',
+    'data.xlsx', 'data.xls', 'data.csv',
+    'data/dataforautomation.xlsx', 'dataforautomation.xlsx',
+  ];
   for (const name of candidates) {
     try {
       const res = await fetch(name);
@@ -205,6 +425,40 @@ async function autoLoadDefaultFile() {
     }
   }
   // No default file found — upload screen stays visible (do nothing)
+}
+
+// Load file from a user-supplied URL (Method 2)
+async function loadFromURL() {
+  const urlInput = $('url-input');
+  const url = urlInput ? urlInput.value.trim() : '';
+  if (!url) { alert('Please paste a URL first.'); return; }
+
+  showLoading();
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`Server returned ${res.status} ${res.statusText}`);
+    const buffer = await res.arrayBuffer();
+    // Derive a clean filename from the URL
+    const filename = decodeURIComponent(url.split('/').pop().split('?')[0]) || 'file.xlsx';
+    loadFromBuffer(buffer, filename);
+    if (urlInput) urlInput.value = '';
+  } catch (err) {
+    console.error('URL load failed:', err);
+    alert(
+      'Could not load file from that URL.\n\n' +
+      'Common reasons:\n' +
+      '• The link is not a direct download link (SharePoint viewer URLs won\'t work)\n' +
+      '• CORS policy blocked the request\n' +
+      '• You\'re not logged in to the file\'s host\n\n' +
+      'For SharePoint / OneDrive:\n' +
+      '  1. Open the file in SharePoint\n' +
+      '  2. Click "Download" — copy the download URL from the browser address bar\n' +
+      '  3. Paste that URL here\n\n' +
+      'Error: ' + err.message
+    );
+  } finally {
+    hideLoading();
+  }
 }
 
 // ── Sheet management ───────────────────────────────────────────────────────
@@ -646,7 +900,7 @@ async function exportAllVisuals() {
   const fileName   = (ui.fileNameDisplay.textContent || 'dashboard')
     .replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
 
-  loadingMsg.textContent = 'PDF bana raha hai...';
+  loadingMsg.textContent = 'PDF generating...';
   showLoading();
 
   // A4 Landscape (mm)
@@ -1656,6 +1910,20 @@ function init() {
     e.target.value = '';
   });
 
+  // Microsoft Sign-in / SharePoint buttons
+  const btnMsSignin  = $('btn-ms-signin');
+  const btnMsSignout = $('btn-ms-signout');
+  const btnSpLoad    = $('btn-sp-load');
+  if (btnMsSignin)  btnMsSignin.addEventListener('click', msSignIn);
+  if (btnMsSignout) btnMsSignout.addEventListener('click', msSignOut);
+  if (btnSpLoad)    btnSpLoad.addEventListener('click', loadFromSharePoint);
+
+  // URL paste load (no sign-in)
+  const btnUrlLoad = $('btn-url-load');
+  if (btnUrlLoad) btnUrlLoad.addEventListener('click', loadFromUrl);
+  const urlPasteInput = $('url-paste-input');
+  if (urlPasteInput) urlPasteInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadFromUrl(); });
+
 
   // Game Detail Modal close
   $('game-modal-close').addEventListener('click', hideGameDetail);
@@ -1727,6 +1995,7 @@ function init() {
 
 // Boot
 init();
+initMSAL();
 // Show hint on file:// protocol (Live Server not running)
 if (location.protocol === 'file:') {
   const hint = document.getElementById('auto-load-hint');

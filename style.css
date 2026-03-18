@@ -107,6 +107,84 @@ html, body { height: 100%; font-family: var(--font); background: var(--bg); colo
 .drop-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
 .drop-formats { color: var(--text-muted); font-size: 12px; margin-top: 16px; }
 
+/* ===== URL LOAD (Method 2) ===== */
+.url-load-wrap { margin-top: 20px; }
+.url-load-or {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 12px; color: var(--text-muted); margin-bottom: 12px;
+}
+.url-load-or::before, .url-load-or::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.url-load-row { display: flex; gap: 8px; }
+.url-input {
+  flex: 1; padding: 10px 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--text-primary);
+  outline: none; transition: border-color 0.2s;
+}
+.url-input:focus { border-color: var(--accent); }
+.btn-url-load {
+  padding: 10px 18px;
+  background: var(--header-bg); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; transition: background 0.2s;
+}
+.btn-url-load:hover { background: #0f3460; }
+.url-load-hint {
+  font-size: 11.5px; color: var(--text-muted);
+  margin-top: 8px; text-align: left; line-height: 1.6;
+}
+#url-load-status { min-height: 18px; transition: color 0.2s; }
+
+/* Paste URL section (Method 3 — no sign-in) */
+.url-paste-wrap { margin-top: 16px; }
+.url-paste-row { display: flex; gap: 8px; }
+.url-paste-input {
+  flex: 1; padding: 10px 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--text-primary);
+  outline: none; transition: border-color 0.2s;
+}
+.url-paste-input:focus { border-color: #F2C811; }
+
+/* Microsoft Sign-in button */
+.btn-ms-signin {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 11px 18px;
+  background: #fff; color: #1a1a2e;
+  border: 1.5px solid #d1d5db; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  justify-content: center;
+}
+.btn-ms-signin:hover { background: #f3f4f6; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+/* Signed-in state */
+.sp-user-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.sp-user-info { display: flex; align-items: center; gap: 8px; }
+.sp-user-icon { font-size: 18px; }
+.sp-user-name { font-size: 13px; font-weight: 600; color: #15803d; }
+.sp-signout-btn { font-size: 12px; padding: 4px 10px; }
+.btn-sp-load {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 11px 18px;
+  background: #0f3460; color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background 0.2s; justify-content: center;
+}
+.btn-sp-load:hover { background: #1a1a2e; }
+.sp-load-status {
+  font-size: 12px; margin-top: 8px; min-height: 18px; text-align: center;
+}
+
 /* ===== BUTTONS ===== */
 .btn-primary {
   display: inline-block;
