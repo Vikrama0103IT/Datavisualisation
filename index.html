@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DataViz Pro</title>
+  <title>Data Visualisation</title>
   <link rel="stylesheet" href="style.css" />
   <!-- SheetJS -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -26,7 +26,7 @@
           <rect width="48" height="48" rx="12" fill="#F2C811"/>
           <path d="M12 36V28M20 36V20M28 36V24M36 36V16" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>
         </svg>
-        <span>DataViz Pro</span>
+        <span>Data Visualisation</span>
       </div>
       <h1>Visualize Your Data Instantly</h1>
       <p>Upload any Excel or CSV file to generate an interactive PowerBI-style dashboard</p>
@@ -193,7 +193,7 @@
       <main class="content" id="content">
 
         <!-- QA Slide Header -->
-        <div class="slide-header qa-slide-header">
+        <div class="slide-header qa-slide-header" id="qa-anchor">
           <div class="slide-header-icon qa-slide-header-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
@@ -228,18 +228,36 @@
             <div class="plat-kpi-label">SP</div>
             <div class="plat-kpi-value" id="kpi-sp-val">—</div>
             <div class="plat-kpi-sub">Smart Phone</div>
+            <div class="plat-kpi-breakdown">
+              <span class="pkb-item pkb-live"><span class="pkb-count" id="kpi-sp-live">—</span><span class="pkb-label">Live</span></span>
+              <span class="pkb-item pkb-r2g"><span class="pkb-count" id="kpi-sp-r2g">—</span><span class="pkb-label">R2G</span></span>
+              <span class="pkb-item pkb-rework"><span class="pkb-count" id="kpi-sp-rework">—</span><span class="pkb-label">Rework</span></span>
+              <span class="pkb-item pkb-hold"><span class="pkb-count" id="kpi-sp-hold">—</span><span class="pkb-label">Hold</span></span>
+            </div>
           </div>
 
           <div class="plat-kpi" id="kpi-stb">
             <div class="plat-kpi-label">STB</div>
             <div class="plat-kpi-value" id="kpi-stb-val">—</div>
             <div class="plat-kpi-sub">Set Top Box</div>
+            <div class="plat-kpi-breakdown">
+              <span class="pkb-item pkb-live"><span class="pkb-count" id="kpi-stb-live">—</span><span class="pkb-label">Live</span></span>
+              <span class="pkb-item pkb-r2g"><span class="pkb-count" id="kpi-stb-r2g">—</span><span class="pkb-label">R2G</span></span>
+              <span class="pkb-item pkb-rework"><span class="pkb-count" id="kpi-stb-rework">—</span><span class="pkb-label">Rework</span></span>
+              <span class="pkb-item pkb-hold"><span class="pkb-count" id="kpi-stb-hold">—</span><span class="pkb-label">Hold</span></span>
+            </div>
           </div>
 
           <div class="plat-kpi" id="kpi-jp">
             <div class="plat-kpi-label">JP</div>
             <div class="plat-kpi-value" id="kpi-jp-val">—</div>
             <div class="plat-kpi-sub">Jio Phone</div>
+            <div class="plat-kpi-breakdown">
+              <span class="pkb-item pkb-live"><span class="pkb-count" id="kpi-jp-live">—</span><span class="pkb-label">Live</span></span>
+              <span class="pkb-item pkb-r2g"><span class="pkb-count" id="kpi-jp-r2g">—</span><span class="pkb-label">R2G</span></span>
+              <span class="pkb-item pkb-rework"><span class="pkb-count" id="kpi-jp-rework">—</span><span class="pkb-label">Rework</span></span>
+              <span class="pkb-item pkb-hold"><span class="pkb-count" id="kpi-jp-hold">—</span><span class="pkb-label">Hold</span></span>
+            </div>
           </div>
         </div>
 
@@ -360,7 +378,7 @@
               </svg>
             </div>
             <div>
-              <h2 class="slide-title">Live Games — 2025 / 2026</h2>
+              <h2 class="slide-title">Live Games </h2>
               <p class="slide-sub">Live games overview &nbsp;·&nbsp; Sheet: <span id="live-sheet-label">—</span></p>
             </div>
           </div>
@@ -451,7 +469,7 @@
               </svg>
             </div>
             <div>
-              <h2 class="slide-title">Premium Games — 2025 / 2026</h2>
+              <h2 class="slide-title">Premium Games</h2>
               <p class="slide-sub">Premium games overview &nbsp;·&nbsp; Sheet: <span id="premium-sheet-label">—</span></p>
             </div>
           </div>
@@ -506,7 +524,7 @@
               </svg>
             </div>
             <div>
-              <h2 class="slide-title">GameSnacks — 2025 / 2026</h2>
+              <h2 class="slide-title">GameSnacks </h2>
               <p class="slide-sub">GameSnacks overview &nbsp;·&nbsp; Sheet: <span id="gs-sheet-label">—</span></p>
             </div>
           </div>

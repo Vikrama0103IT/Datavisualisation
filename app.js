@@ -462,30 +462,88 @@ async function loadFromURL() {
 }
 
 // ── Sheet management ───────────────────────────────────────────────────────
+function getSectionTarget(sheetName) {
+  const n = sheetName.toLowerCase();
+  if (/pqa/.test(n))           return 'pqa-section';
+  if (/live/.test(n))          return 'live-section';
+  if (/premium/.test(n))       return 'premium-section';
+  if (/game\s*snack/.test(n))  return 'gamesnacks-section';
+  return null; // QA / main sheet
+}
+
+function scrollToSection(el) {
+  const content = $('content');
+  if (!content || !el) return;
+  const top = el.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop - 10;
+  content.scrollTo({ top, behavior: 'smooth' });
+}
+
 function buildSheetTabs(wb) {
   ui.sheetTabs.innerHTML = '';
   wb.SheetNames.forEach(name => {
+    const sectionId = getSectionTarget(name);
     const btn = document.createElement('button');
     btn.className = 'sheet-tab';
     btn.textContent = name;
-    btn.onclick = () => {
-      state.filters = {};
-      state.searchQuery = '';
-      state.page = 0;
-      ui.tableSearch.value = '';
-      loadSheet(name);
-    };
+
+    if (sectionId) {
+      // Dedicated section — scroll to it, don't reload QA data
+      btn.onclick = () => {
+        const el = $(sectionId);
+        if (!el || el.classList.contains('hidden')) return;
+        scrollToSection(el);
+        document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+      };
+    } else {
+      // QA / main sheet — load data
+      btn.onclick = () => {
+        state.filters = {};
+        state.searchQuery = '';
+        state.page = 0;
+        ui.tableSearch.value = '';
+        loadSheet(name);
+        const content = $('content');
+        if (content) content.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+    }
     ui.sheetTabs.appendChild(btn);
   });
+}
+
+function initScrollActiveTabs() {
+  const content = $('content');
+  if (!content) return;
+  const sections = [
+    { id: 'gamesnacks-section', pattern: /game\s*snack/i },
+    { id: 'premium-section',   pattern: /premium/i },
+    { id: 'live-section',      pattern: /live/i },
+    { id: 'pqa-section',       pattern: /pqa/i },
+  ];
+  content.addEventListener('scroll', () => {
+    const contentTop = content.getBoundingClientRect().top;
+    let matchPattern = null;
+    for (const s of sections) {
+      const el = $(s.id);
+      if (!el || el.classList.contains('hidden')) continue;
+      if (el.getBoundingClientRect().top - contentTop <= 80) { matchPattern = s.pattern; break; }
+    }
+    document.querySelectorAll('.sheet-tab').forEach(tab => {
+      const isActive = matchPattern
+        ? matchPattern.test(tab.textContent)
+        : tab.textContent === state.sheetName;
+      tab.classList.toggle('active', isActive);
+    });
+  }, { passive: true });
 }
 
 // Map sheet names to display metadata
 function getSheetMeta(name) {
   const n = name.toLowerCase();
   if (/pqa/.test(n))                        return { title: 'PQA Games — 2025 / 2026',     sub: 'Pre-QA testing overview',  hero: 'Total PQA Games'    };
-  if (/live/.test(n))                       return { title: 'Live Games — 2025 / 2026',    sub: 'Live games overview',      hero: 'Total Live Games'   };
-  if (/premium/.test(n))                    return { title: 'Premium Games — 2025 / 2026', sub: 'Premium games overview',   hero: 'Total Premium Games' };
-  if (/game\s*snack/.test(n))               return { title: 'GameSnacks — 2025 / 2026',    sub: 'GameSnacks overview',      hero: 'Total GameSnacks'   };
+  if (/live/.test(n))                       return { title: 'Live Games',    sub: 'Live games overview', hero: 'Total Live Games' };
+  if (/premium/.test(n))                    return { title: 'Premium Games', sub: 'Premium games overview',   hero: 'Total Premium Games' };
+  if (/game\s*snack/.test(n))               return { title: 'GameSnacks ',    sub: 'GameSnacks overview',      hero: 'Total GameSnacks'   };
   return                                           { title: 'QA Games — 2025 / 2026',      sub: 'QA testing overview',      hero: 'Total QA Games'     };
 }
 
@@ -603,8 +661,10 @@ function applyFilters() {
 function buildFilters() {
   ui.filterList.innerHTML = '';
   // Show filters for text/date columns only (up to 6)
+  // Skip game-name and partner columns — those have dedicated UI controls
+  const skipPattern = /game.?name|game.?title|\bname\b|\btitle\b|partner/i;
   const filterCols = state.columns
-    .filter(c => c.type !== 'number')
+    .filter(c => c.type !== 'number' && !skipPattern.test(c.name))
     .slice(0, 6);
 
   filterCols.forEach(col => {
@@ -657,10 +717,12 @@ function buildFieldList() {
 }
 
 // ── Chart select population ────────────────────────────────────────────────
+const CHART_SKIP = /game.?name|game.?title|pqa.?game|\bname\b|\btitle\b|partner/i;
+
 function populateChartSelects() {
   const allCols = state.columns.map(c => c.name);
   const catCols = state.columns.filter(c => c.type !== 'number').map(c => c.name);
-  const cols = catCols.length ? catCols : allCols;
+  const cols = (catCols.length ? catCols : allCols).filter(c => !CHART_SKIP.test(c));
 
   const opts = cols.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
   ui.statusCol.innerHTML = opts;
@@ -689,7 +751,8 @@ function renderKPIs() {
     ? `${total.toLocaleString('en-IN')} filtered  /  ${rawTotal.toLocaleString('en-IN')} total`
     : `${rawTotal.toLocaleString('en-IN')} total records`;
 
-  const platCol = ui.platformCol ? ui.platformCol.value : '';
+  const platCol   = ui.platformCol ? ui.platformCol.value : '';
+  const statusCol = ui.statusCol   ? ui.statusCol.value   : '';
   if (platCol) {
     const counts = aggregate(state.filteredData, platCol, '__count__', 'count', 'none');
     const find = (...tags) => {
@@ -701,6 +764,33 @@ function renderKPIs() {
     $('kpi-sp-val').textContent  = find('sp', 'mobile', 'smartphone');
     $('kpi-stb-val').textContent = find('stb');
     $('kpi-jp-val').textContent  = find('jp', 'jiophone', 'jio phone', 'candy');
+
+    // Status breakdown per platform
+    if (statusCol) {
+      const platforms = {
+        sp:  ['sp', 'mobile', 'smartphone'],
+        stb: ['stb'],
+        jp:  ['jp', 'jiophone', 'jio phone', 'candy'],
+      };
+      const statuses = {
+        live:   ['live'],
+        r2g:    ['r2g', 'ready to go'],
+        rework: ['rework', 're-work'],
+        hold:   ['hold'],
+      };
+      Object.entries(platforms).forEach(([platKey, platTags]) => {
+        const platRows = state.filteredData.filter(row =>
+          platTags.some(t => String(row[platCol] || '').toLowerCase().includes(t.toLowerCase()))
+        );
+        Object.entries(statuses).forEach(([statusKey, statusTags]) => {
+          const count = platRows.filter(row =>
+            statusTags.some(t => String(row[statusCol] || '').toLowerCase().includes(t.toLowerCase()))
+          ).length;
+          const el = $(`kpi-${platKey}-${statusKey}`);
+          if (el) el.textContent = count.toLocaleString('en-IN');
+        });
+      });
+    }
   }
 }
 
@@ -933,7 +1023,7 @@ async function exportAllVisuals() {
       pdf.setFillColor(242, 200, 17);
       pdf.rect(0, 0, PW, HDR, 'F');
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(26, 26, 46);
-      pdf.text('DataViz Pro — Dashboard', M, 8.5);
+      pdf.text('Dashboard', M, 8.5);
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(50, 50, 70);
       pdf.text(`${dateStr}  |  Page ${pg}`, PW - M, 8.5, { align: 'right' });
     };
@@ -1030,7 +1120,7 @@ function loadPQASection(wb) {
 
   // Populate column selects
   const catCols = pqaState.columns.filter(c => c.type !== 'number').map(c => c.name);
-  const choices  = catCols.length ? catCols : pqaState.columns.map(c => c.name);
+  const choices  = (catCols.length ? catCols : pqaState.columns.map(c => c.name)).filter(c => !CHART_SKIP.test(c));
   const opts = choices.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
   if (ui.pqaStatusCol)   ui.pqaStatusCol.innerHTML   = opts;
   if (ui.pqaPlatformCol) ui.pqaPlatformCol.innerHTML = opts;
@@ -1632,7 +1722,7 @@ function loadLiveSection(wb) {
 
   // Populate column selects
   const catCols = liveState.columns.filter(c => c.type !== 'number').map(c => c.name);
-  const choices  = catCols.length ? catCols : liveState.columns.map(c => c.name);
+  const choices  = (catCols.length ? catCols : liveState.columns.map(c => c.name)).filter(c => !CHART_SKIP.test(c));
   const opts = choices.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
   if (ui.liveStatusCol)   ui.liveStatusCol.innerHTML   = opts;
   if (ui.livePlatformCol) ui.livePlatformCol.innerHTML = opts;
@@ -1985,12 +2075,15 @@ function init() {
   if (gsSearch) gsSearch.addEventListener('input', renderGameSnacksList);
 
   // Chart control changes
-  ui.statusCol.addEventListener('change', renderStatus);
-  ui.platformCol.addEventListener('change', renderPlatform);
+  ui.statusCol.addEventListener('change', () => { renderStatus(); renderKPIs(); });
+  ui.platformCol.addEventListener('change', () => { renderPlatform(); renderKPIs(); });
 
   // PQA chart control changes
   if (ui.pqaStatusCol)   ui.pqaStatusCol.addEventListener('change',   renderPQAStatus);
   if (ui.pqaPlatformCol) ui.pqaPlatformCol.addEventListener('change', () => { renderPQAKPIs(); renderPQAPlatform(); });
+
+  // Scroll-based active tab
+  initScrollActiveTabs();
 }
 
 // Boot
