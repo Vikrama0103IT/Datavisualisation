@@ -292,8 +292,10 @@ const ui = {
   platformCol: $('platform-col'),
   pqaStatusCol:    $('pqa-status-col'),
   pqaPlatformCol:  $('pqa-platform-col'),
-  liveStatusCol:   $('live-status-col'),
   livePlatformCol: $('live-platform-col'),
+  liveVCountCol:   $('live-vcount-col'),
+  liveDevCol:      $('live-dev-col'),
+  liveDayCol:      $('live-day-col'),
 };
 
 // ── Colour palette ─────────────────────────────────────────────────────────
@@ -861,7 +863,25 @@ function renderStatus() {
       ...CHART_DEFAULTS,
       cutout: '60%',
       plugins: {
-        legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 10 } },
+        legend: {
+          position: 'right',
+          labels: {
+            font: { size: 11 },
+            boxWidth: 12,
+            padding: 10,
+            generateLabels: chart => {
+              const data = chart.data;
+              return data.labels.map((label, i) => ({
+                text: `${label}  (${data.datasets[0].data[i]})`,
+                fillStyle: data.datasets[0].backgroundColor[i],
+                strokeStyle: '#fff',
+                lineWidth: 2,
+                hidden: false,
+                index: i
+              }));
+            }
+          }
+        },
         tooltip: {
           callbacks: {
             label: ctx => {
@@ -870,9 +890,18 @@ function renderStatus() {
               return ` ${ctx.label}: ${ctx.parsed}  (${pct}%)`;
             }
           }
+        },
+        datalabels: {
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          color: '#fff',
+          font: { size: 12, weight: 'bold' },
+          formatter: (value) => value,
+          textStrokeColor: 'rgba(0,0,0,0.4)',
+          textStrokeWidth: 2,
         }
       }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
@@ -900,16 +929,25 @@ function renderPlatform() {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
+      layout: { padding: { right: 36 } },
       plugins: {
         ...CHART_DEFAULTS.plugins,
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` Games: ${ctx.parsed.x}` } }
+        tooltip: { callbacks: { label: ctx => ` Games: ${ctx.parsed.x}` } },
+        datalabels: {
+          anchor: 'end',
+          align: 'right',
+          color: '#94a3b8',
+          font: { size: 11, weight: 'bold' },
+          formatter: v => v,
+        }
       },
       scales: {
         y: { ticks: { font: { size: 11 } } },
         x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
       }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
@@ -1205,9 +1243,18 @@ function renderPQAStatus() {
               return ` ${ctx.label}: ${ctx.parsed}  (${pct}%)`;
             }
           }
+        },
+        datalabels: {
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          color: '#fff',
+          font: { size: 12, weight: 'bold' },
+          formatter: v => v,
+          textStrokeColor: 'rgba(0,0,0,0.4)',
+          textStrokeWidth: 2,
         }
       }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
@@ -1234,16 +1281,25 @@ function renderPQAPlatform() {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
+      layout: { padding: { right: 36 } },
       plugins: {
         ...CHART_DEFAULTS.plugins,
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` PQA Games: ${ctx.parsed.x}` } }
+        tooltip: { callbacks: { label: ctx => ` PQA Games: ${ctx.parsed.x}` } },
+        datalabels: {
+          anchor: 'end',
+          align: 'right',
+          color: '#94a3b8',
+          font: { size: 11, weight: 'bold' },
+          formatter: v => v,
+        }
       },
       scales: {
         y: { ticks: { font: { size: 11 } } },
         x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
       }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
@@ -1723,23 +1779,32 @@ function loadLiveSection(wb) {
   // Populate column selects
   const catCols = liveState.columns.filter(c => c.type !== 'number').map(c => c.name);
   const choices  = (catCols.length ? catCols : liveState.columns.map(c => c.name)).filter(c => !CHART_SKIP.test(c));
+  const allCols  = liveState.columns.map(c => c.name);
   const opts = choices.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
-  if (ui.liveStatusCol)   ui.liveStatusCol.innerHTML   = opts;
+  const allOpts = allCols.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
   if (ui.livePlatformCol) ui.livePlatformCol.innerHTML = opts;
+  if (ui.liveDevCol) ui.liveDevCol.innerHTML = allOpts;
+  if (ui.liveDayCol) ui.liveDayCol.innerHTML = allOpts;
+
+  // Populate V Count select with numeric columns
+  const numCols = liveState.columns.filter(c => c.type === 'number').map(c => c.name);
+  if (ui.liveVCountCol) {
+    ui.liveVCountCol.innerHTML = '<option value="">(none)</option>' +
+      numCols.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
+    const vcDef = numCols.find(c => /v[\s_-]?count|viewer|vcount/i.test(c));
+    if (vcDef) ui.liveVCountCol.value = vcDef;
+  }
 
   function detect(keywords) {
-    return choices.find(c => keywords.some(k => c.toLowerCase().includes(k))) || choices[0] || '';
+    return allCols.find(c => keywords.some(k => c.toLowerCase().includes(k))) || allCols[0] || '';
   }
-  const sDef = detect(['status', 'state', 'result', 'pass', 'fail', 'live', 'qa']);
-  const pDef = detect(['platform', 'device', 'type', 'sp', 'stb', 'jp']);
+  const pDef   = detect(['platform', 'device', 'type', 'sp', 'stb', 'jp']);
+  const devDef = detect(['developer', 'dev', 'studio', 'publisher']);
+  const dayDef = detect(['live day', 'liveday', 'day', 'date', 'go live']);
 
-  if (ui.liveStatusCol && sDef) ui.liveStatusCol.value = sDef;
-  if (ui.livePlatformCol) {
-    const useP = pDef && pDef !== ui.liveStatusCol?.value
-      ? pDef
-      : (choices.find(c => c !== (ui.liveStatusCol?.value || '')) || pDef);
-    if (useP) ui.livePlatformCol.value = useP;
-  }
+  if (ui.livePlatformCol && pDef)   ui.livePlatformCol.value = pDef;
+  if (ui.liveDevCol     && devDef)  ui.liveDevCol.value      = devDef;
+  if (ui.liveDayCol     && dayDef)  ui.liveDayCol.value      = dayDef;
 
   liveSection.classList.remove('hidden');
   renderLiveKPIs();
@@ -1777,7 +1842,7 @@ function renderLiveKPIs() {
 }
 
 function renderLiveCharts() {
-  renderLiveStatus();
+  renderLiveDetailsChart();
   renderLivePlatform();
 }
 
@@ -1821,41 +1886,162 @@ function renderLiveStatus() {
   });
 }
 
+function renderLiveDetailsChart() {
+  destroyChart('liveDetails');
+  const groupCol = ui.liveDevCol?.value  || '';
+  const dayCol   = ui.liveDayCol?.value  || '';
+  const platCol  = ui.livePlatformCol?.value || '';
+  if (!groupCol || !liveState.data.length) return;
+
+  let data = platCol
+    ? liveState.data.filter(row => !/store\s*front/i.test(String(row[platCol] || '')))
+    : liveState.data;
+
+  const entries = aggregate(data, groupCol, '__count__', 'count', 'value_desc').slice(0, 15);
+
+  const ctx = $('live-details-chart');
+  if (!ctx) return;
+  state.charts.liveDetails = new Chart(ctx.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e => e.key),
+      datasets: [{
+        data: entries.map(e => e.value),
+        backgroundColor: entries.map((_, i) => PALETTE[i % PALETTE.length] + 'e0'),
+        borderColor: '#fff',
+        borderWidth: 2,
+        hoverOffset: 10,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      cutout: '55%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            font: { size: 11 }, boxWidth: 12, padding: 10,
+            generateLabels: chart => {
+              const d = chart.data;
+              return d.labels.map((label, i) => ({
+                text: `${label}  (${d.datasets[0].data[i]})`,
+                fillStyle: d.datasets[0].backgroundColor[i],
+                strokeStyle: '#fff',
+                lineWidth: 2,
+                hidden: false,
+                index: i,
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct   = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+              return ` ${ctx.label}: ${ctx.parsed}  (${pct}%)`;
+            }
+          }
+        },
+        datalabels: {
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          color: '#fff',
+          font: { size: 11, weight: 'bold' },
+          formatter: v => v,
+          textStrokeColor: 'rgba(0,0,0,0.4)',
+          textStrokeWidth: 2,
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
 function renderLivePlatform() {
   destroyChart('livePlatform');
-  const col = ui.livePlatformCol ? ui.livePlatformCol.value : '';
+  const col   = ui.livePlatformCol ? ui.livePlatformCol.value : '';
+  const vcCol = ui.liveVCountCol   ? ui.liveVCountCol.value   : '';
   if (!col || !liveState.data.length) return;
 
   const entries = aggregate(liveState.data, col, '__count__', 'count', 'value_desc')
     .filter(e => !/store\s*front/i.test(e.key))
     .slice(0, 15);
+
+  const datasets = [{
+    label: 'Live Games',
+    data: entries.map(e => e.value),
+    backgroundColor: entries.map((_, i) => PALETTE[i % PALETTE.length] + 'cc'),
+    borderColor:     entries.map((_, i) => PALETTE[i % PALETTE.length]),
+    borderWidth: 1,
+    borderRadius: 5,
+    xAxisID: 'x',
+  }];
+
+  if (vcCol) {
+    const vcMap = Object.fromEntries(
+      aggregate(liveState.data, col, vcCol, 'sum', 'none').map(e => [e.key, e.value])
+    );
+    datasets.push({
+      label: vcCol,
+      data: entries.map(e => vcMap[e.key] ?? 0),
+      backgroundColor: '#6366f155',
+      borderColor: '#6366f1',
+      borderWidth: 1,
+      borderRadius: 5,
+      xAxisID: 'x2',
+    });
+  }
+
   const ctx = $('live-platform-chart').getContext('2d');
   state.charts.livePlatform = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: entries.map(e => e.key),
-      datasets: [{
-        label: 'Live Games',
-        data: entries.map(e => e.value),
-        backgroundColor: entries.map((_, i) => PALETTE[i % PALETTE.length] + 'cc'),
-        borderColor:     entries.map((_, i) => PALETTE[i % PALETTE.length]),
-        borderWidth: 1,
-        borderRadius: 5,
-      }]
+      datasets,
     },
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
+      layout: { padding: { right: 36 } },
       plugins: {
         ...CHART_DEFAULTS.plugins,
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` Live Games: ${ctx.parsed.x}` } }
+        legend: { display: !!vcCol, labels: { font: { size: 11 }, boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.x;
+              return ` ${ctx.dataset.label}: ${formatNumber(v)}`;
+            }
+          }
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'right',
+          color: '#94a3b8',
+          font: { size: 11, weight: 'bold' },
+          formatter: (v, ctx) => ctx.datasetIndex === 0 ? v : formatNumber(v),
+        }
       },
       scales: {
         y: { ticks: { font: { size: 11 } } },
-        x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
+        x: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, font: { size: 10 } },
+          title: { display: !!vcCol, text: 'Games Count', font: { size: 10 } },
+        },
+        ...(vcCol ? {
+          x2: {
+            type: 'linear',
+            position: 'top',
+            beginAtZero: true,
+            ticks: { font: { size: 10 }, callback: v => formatNumber(v) },
+            title: { display: true, text: vcCol, font: { size: 10 }, color: '#6366f1' },
+            grid: { drawOnChartArea: false },
+          }
+        } : {}),
       }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
@@ -2059,8 +2245,10 @@ function init() {
   if (sbPqaGameSearch) sbPqaGameSearch.addEventListener('input', renderPQASidebarGameList);
 
   // Live chart control changes
-  if (ui.liveStatusCol)   ui.liveStatusCol.addEventListener('change', renderLiveStatus);
-  if (ui.livePlatformCol) ui.livePlatformCol.addEventListener('change', () => { renderLiveKPIs(); renderLivePlatform(); });
+  if (ui.livePlatformCol) ui.livePlatformCol.addEventListener('change', () => { renderLiveKPIs(); renderLivePlatform(); renderLiveDetailsChart(); });
+  if (ui.liveVCountCol)   ui.liveVCountCol.addEventListener('change', renderLivePlatform);
+  if (ui.liveDevCol)      ui.liveDevCol.addEventListener('change', renderLiveDetailsChart);
+  if (ui.liveDayCol)      ui.liveDayCol.addEventListener('change', renderLiveDetailsChart);
 
   // Live serial list search
   const liveSerialSearch = $('live-serial-search');
