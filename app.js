@@ -159,12 +159,13 @@ async function loadFromUrl() {
 
   function showDownloadFallback(rawUrl) {
     setStatus(
-      `CORS block: Browser directly fetch nahi kar sakta (SharePoint security).<br>
-       <strong>Solution:</strong>
-       <a href="${rawUrl}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline;">
-         Yahan click karo → file download hogi
-       </a>
-       — phir us downloaded file ko <strong>drag &amp; drop</strong> karo ya <strong>Browse</strong> se upload karo.`,
+      `<b>SharePoint ne fetch block kar diya.</b><br><br>` +
+      `<b style="color:#f59e0b">Fix karo — 2 steps:</b><br>` +
+      `&nbsp;1. <a href="${rawUrl}" target="_blank" rel="noopener"
+            style="color:#3b82f6;text-decoration:underline;font-weight:600;">
+            Yahan click karo — file download hogi
+          </a><br>` +
+      `&nbsp;2. Us file ko <b>drag &amp; drop</b> karo ya <b>Browse</b> se upload karo`,
       true
     );
   }
@@ -172,53 +173,44 @@ async function loadFromUrl() {
   if (!url) { setStatus('Pehle URL paste karo.', true); return; }
 
   showLoading();
-  setStatus('File fetch ho rahi hai…');
   const downloadUrl = toDownloadUrl(url);
   const fileName = url.split('/').pop().split('?')[0] || 'loaded-file.xlsx';
 
-  // ── Attempt 1: Direct fetch ──────────────────────────────────────────────
-  try {
-    const res = await fetch(downloadUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (!isExcelBuffer(buffer)) throw new Error('not_excel');
-    setStatus('Successfully loaded!');
-    loadFromBuffer(buffer, fileName);
-    return;
-  } catch (e1) {
-    if (e1.message === 'not_excel') {
-      hideLoading();
-      showDownloadFallback(url);
-      return;
-    }
-    // CORS / network error → try proxy
+  async function tryFetch(label, fetchFn) {
+    setStatus(`Trying ${label}…`);
+    try {
+      const res = await fetchFn();
+      if (!res.ok) return false;
+      const buffer = await res.arrayBuffer();
+      if (!isExcelBuffer(buffer)) return 'not_excel';
+      setStatus(`Loaded via ${label}!`);
+      loadFromBuffer(buffer, fileName);
+      return true;
+    } catch (_) { return false; }
   }
 
-  // ── Attempt 2: CORS proxy (works for publicly shared files) ─────────────
-  setStatus('Direct fetch blocked — CORS proxy try ho rahi hai…');
-  try {
-    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl);
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (!isExcelBuffer(buffer)) throw new Error('not_excel');
-    setStatus('Successfully loaded (via proxy)!');
-    loadFromBuffer(buffer, fileName);
-    return;
-  } catch (e2) {
-    hideLoading();
-    if (e2.message === 'not_excel') {
-      setStatus(
-        'File access nahi hui — SharePoint mein login required hai.<br>' +
-        '<strong>Options:</strong> (1) File ko publicly share karo &nbsp;|&nbsp; ' +
-        '(2) <a href="' + url + '" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline;">Download karo</a> ' +
-        'phir drag-drop karo &nbsp;|&nbsp; (3) Microsoft Sign-in use karo (upar)',
-        true
-      );
-    } else {
-      showDownloadFallback(url);
-    }
-  }
+  // Attempt 1 — direct (with browser session cookies, works if already logged in to SP)
+  const r1 = await tryFetch('Direct', () => fetch(downloadUrl, { credentials: 'include' }));
+  if (r1 === true) return;
+  if (r1 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+
+  // Attempt 2 — corsproxy.io (most reliable free CORS proxy right now)
+  const r2 = await tryFetch('corsproxy.io', () => fetch('https://corsproxy.io/?' + encodeURIComponent(downloadUrl)));
+  if (r2 === true) return;
+  if (r2 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+
+  // Attempt 3 — api.allorigins.win
+  const r3 = await tryFetch('allorigins', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl)));
+  if (r3 === true) return;
+  if (r3 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+
+  // Attempt 4 — thingproxy
+  const r4 = await tryFetch('thingproxy', () => fetch('https://thingproxy.freeboard.io/fetch/' + downloadUrl));
+  if (r4 === true) return;
+
+  // All attempts failed — show fallback
+  hideLoading();
+  showDownloadFallback(url);
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
