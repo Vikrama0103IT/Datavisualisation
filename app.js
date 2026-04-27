@@ -16,6 +16,7 @@ const GRAPH_CONFIG = {
 };
 
 let msalInstance = null;
+let pendingSharePointUrl = null; // URL waiting to load after sign-in
 
 function initMSAL() {
   if (!window.msal) return; // MSAL library not loaded
@@ -128,6 +129,98 @@ async function loadFromSharePoint() {
   }
 }
 
+// ── Sign-in fallback for URL paste ────────────────────────────────────────
+function showUrlFallback(rawUrl) {
+  pendingSharePointUrl = rawUrl;
+  const el = document.getElementById('url-load-status');
+  if (!el) return;
+  el.style.color = '#ef4444';
+  el.innerHTML =
+    `<b>SharePoint ne fetch block kar diya.</b><br><br>` +
+
+    `<b style="color:#f59e0b">Option 1 — Manual download:</b><br>` +
+    `&nbsp;<a href="${rawUrl}" target="_blank" rel="noopener"
+        style="color:#3b82f6;text-decoration:underline;font-weight:600;">
+        Yahan click karo → file download hogi
+      </a>
+      &nbsp;phir drag &amp; drop karo<br><br>` +
+
+    `<b style="color:#f59e0b">Option 2 — Microsoft Sign-in (auto load):</b><br>` +
+    `<button onclick="signInAndLoadUrl()"
+        style="margin-top:6px;display:inline-flex;align-items:center;gap:8px;
+               background:#fff;border:1px solid #d1d5db;border-radius:6px;
+               padding:7px 14px;cursor:pointer;font-size:13px;font-weight:500;color:#1f2937">
+      <svg width="16" height="16" viewBox="0 0 21 21" fill="none">
+        <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+        <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+        <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+      </svg>
+      Microsoft se Sign in karo — file auto-load hogi
+    </button>`;
+}
+
+async function signInAndLoadUrl() {
+  if (!msalInstance) {
+    alert(
+      'Microsoft Sign-in setup nahi hai.\n\n' +
+      'Quick setup:\n' +
+      '1. portal.azure.com → Azure Active Directory → App registrations → New registration\n' +
+      '2. Redirect URI (SPA type): ' + window.location.origin + window.location.pathname + '\n' +
+      '3. API permissions → Add → Microsoft Graph → Files.Read (delegated)\n' +
+      '4. Client ID copy karo → app.js mein GRAPH_CONFIG.clientId mein paste karo'
+    );
+    return;
+  }
+  const el = document.getElementById('url-load-status');
+  if (el) { el.style.color = '#10b981'; el.innerHTML = 'Sign-in popup khul raha hai…'; }
+  try {
+    const resp = await msalInstance.loginPopup({ scopes: GRAPH_CONFIG.scopes });
+    onMSALLogin(resp.account);
+    if (pendingSharePointUrl) await loadFromSharePointSharingUrl(pendingSharePointUrl);
+  } catch (err) {
+    if (err.errorCode !== 'user_cancelled') {
+      if (el) { el.style.color = '#ef4444'; el.innerHTML = 'Sign-in failed: ' + err.message; }
+    }
+  }
+}
+
+async function loadFromSharePointSharingUrl(sharingUrl) {
+  const el = document.getElementById('url-load-status');
+  function setStatus(html, isErr = false) {
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.color = isErr ? '#ef4444' : '#10b981';
+  }
+  try {
+    showLoading();
+    setStatus('Graph API se file fetch ho rahi hai…');
+    const token = await getGraphToken();
+    // Microsoft Graph /shares endpoint — encodes any sharing URL to a share ID
+    const b64 = btoa(sharingUrl).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const shareId = 'u!' + b64;
+    const fileName = sharingUrl.split('/').pop().split('?')[0] || 'loaded-file.xlsx';
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem/content`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error(`Graph returned ${res.status} — file access nahi mila`);
+    const buffer = await res.arrayBuffer();
+    if (!isExcelBuffer(buffer)) throw new Error('Response Excel file nahi hai');
+    setStatus('Successfully loaded via Microsoft Sign-in!');
+    pendingSharePointUrl = null;
+    loadFromBuffer(buffer, fileName);
+  } catch (err) {
+    hideLoading();
+    setStatus(
+      `<b>Load failed:</b> ${err.message}<br>` +
+      `File manually <a href="${sharingUrl}" target="_blank" rel="noopener"
+          style="color:#3b82f6;text-decoration:underline">download karo</a> phir drag-drop karo.`,
+      true
+    );
+  }
+}
+
 // ── Load from pasted URL (no sign-in required) ─────────────────────────────
 function toDownloadUrl(url) {
   // SharePoint / OneDrive share links → add download=1 to force binary download
@@ -157,19 +250,6 @@ async function loadFromUrl() {
     statusEl.style.color = isErr ? '#ef4444' : '#10b981';
   }
 
-  function showDownloadFallback(rawUrl) {
-    setStatus(
-      `<b>SharePoint ne fetch block kar diya.</b><br><br>` +
-      `<b style="color:#f59e0b">Fix karo — 2 steps:</b><br>` +
-      `&nbsp;1. <a href="${rawUrl}" target="_blank" rel="noopener"
-            style="color:#3b82f6;text-decoration:underline;font-weight:600;">
-            Yahan click karo — file download hogi
-          </a><br>` +
-      `&nbsp;2. Us file ko <b>drag &amp; drop</b> karo ya <b>Browse</b> se upload karo`,
-      true
-    );
-  }
-
   if (!url) { setStatus('Pehle URL paste karo.', true); return; }
 
   showLoading();
@@ -192,25 +272,25 @@ async function loadFromUrl() {
   // Attempt 1 — direct (with browser session cookies, works if already logged in to SP)
   const r1 = await tryFetch('Direct', () => fetch(downloadUrl, { credentials: 'include' }));
   if (r1 === true) return;
-  if (r1 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+  if (r1 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
   // Attempt 2 — corsproxy.io (most reliable free CORS proxy right now)
   const r2 = await tryFetch('corsproxy.io', () => fetch('https://corsproxy.io/?' + encodeURIComponent(downloadUrl)));
   if (r2 === true) return;
-  if (r2 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+  if (r2 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
   // Attempt 3 — api.allorigins.win
   const r3 = await tryFetch('allorigins', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl)));
   if (r3 === true) return;
-  if (r3 === 'not_excel') { hideLoading(); showDownloadFallback(url); return; }
+  if (r3 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
   // Attempt 4 — thingproxy
   const r4 = await tryFetch('thingproxy', () => fetch('https://thingproxy.freeboard.io/fetch/' + downloadUrl));
   if (r4 === true) return;
 
-  // All attempts failed — show fallback
+  // All attempts failed — show sign-in + download fallback
   hideLoading();
-  showDownloadFallback(url);
+  showUrlFallback(url);
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
