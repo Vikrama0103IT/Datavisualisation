@@ -655,6 +655,7 @@ function loadSheet(name) {
 
 // ── Show/hide screens ──────────────────────────────────────────────────────
 function showDashboard() {
+  hideLoading();
   ui.uploadScreen.classList.add('hidden');
   ui.dashboard.classList.remove('hidden');
 }
