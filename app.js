@@ -269,23 +269,26 @@ async function loadFromUrl() {
     } catch (_) { return false; }
   }
 
-  // Attempt 1 — direct (with browser session cookies, works if already logged in to SP)
-  const r1 = await tryFetch('Direct', () => fetch(downloadUrl, { credentials: 'include' }));
+  // SharePoint/OneDrive needs session cookies; other URLs (GitHub etc) use omit so wildcard CORS works
+  const isSpUrl = downloadUrl.includes('sharepoint.com') || downloadUrl.includes('1drv.ms') || downloadUrl.includes('onedrive.live.com');
+
+  // Attempt 1 — direct fetch
+  const r1 = await tryFetch('Direct', () => fetch(downloadUrl, { credentials: isSpUrl ? 'include' : 'omit' }));
   if (r1 === true) return;
   if (r1 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
-  // Attempt 2 — corsproxy.io (most reliable free CORS proxy right now)
-  const r2 = await tryFetch('corsproxy.io', () => fetch('https://corsproxy.io/?' + encodeURIComponent(downloadUrl)));
+  // Attempt 2 — corsproxy.io
+  const r2 = await tryFetch('corsproxy.io', () => fetch('https://corsproxy.io/?' + encodeURIComponent(downloadUrl), { credentials: 'omit' }));
   if (r2 === true) return;
   if (r2 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
   // Attempt 3 — api.allorigins.win
-  const r3 = await tryFetch('allorigins', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl)));
+  const r3 = await tryFetch('allorigins', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl), { credentials: 'omit' }));
   if (r3 === true) return;
   if (r3 === 'not_excel') { hideLoading(); showUrlFallback(url); return; }
 
   // Attempt 4 — thingproxy
-  const r4 = await tryFetch('thingproxy', () => fetch('https://thingproxy.freeboard.io/fetch/' + downloadUrl));
+  const r4 = await tryFetch('thingproxy', () => fetch('https://thingproxy.freeboard.io/fetch/' + downloadUrl, { credentials: 'omit' }));
   if (r4 === true) return;
 
   // All attempts failed — show sign-in + download fallback
